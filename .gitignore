@@ -1,0 +1,36 @@
+# Unreal Engine
+Binaries/
+Build/
+DerivedDataCache/
+Intermediate/
+Saved/
+*.VC.db
+*.opensdf
+*.opendb
+*.sdf
+*.sln
+*.suo
+*.xcworkspace
+*.xcodeproj
+/AutomationTool/
+/Engine/
+
+# Visual Studio
+.vs/
+*.user
+
+# Rider
+.idea/
+*.DotSettings.user
+
+# Plugin build artifacts (keep source, ignore compiled output)
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
+
+# Large binary content that should go through Git LFS instead
+# *.uasset
+# *.umap
+
+# OS
+Thumbs.db
+.DS_Store
