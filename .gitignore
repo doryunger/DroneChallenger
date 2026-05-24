@@ -27,9 +27,20 @@ Saved/
 Plugins/*/Binaries/
 Plugins/*/Intermediate/
 
-# Large binary content that should go through Git LFS instead
-# *.uasset
-# *.umap
+# Cesium tile cache
+cesium-request-cache.sqlite
+cesium-request-cache.sqlite-shm
+cesium-request-cache.sqlite-wal
+
+# UE developer & collections folders (machine-specific)
+Content/Developers/
+Content/Collections/
+
+# Leftover default Untitled map artifacts
+Content/Untitled.umap
+Content/Untitled_HLOD0_Instancing.uasset
+Content/__ExternalActors__/Untitled/
+Content/__ExternalObjects__/Untitled/
 
 # OS
 Thumbs.db
