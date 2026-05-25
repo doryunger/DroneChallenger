@@ -1,8 +1,11 @@
 #include "DroneActor.h"
+#include "Components/BoxComponent.h"
+#include "Components/PoseableMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/AudioComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
-#include "UObject/ConstructorHelpers.h"
+#include "Kismet/GameplayStatics.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputAction.h"
@@ -14,40 +17,54 @@ ADroneActor::ADroneActor()
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PrePhysics;
 
-	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DroneBody"));
-	RootComponent = MeshComponent;
+	PhysicsBody = CreateDefaultSubobject<UBoxComponent>(TEXT("PhysicsBody"));
+	PhysicsBody->SetBoxExtent(FVector(35.0f, 40.0f, 11.0f));
+	PhysicsBody->SetSimulatePhysics(true);
+	PhysicsBody->SetEnableGravity(true);
+	PhysicsBody->SetCollisionProfileName(TEXT("Pawn"));
+	RootComponent = PhysicsBody;
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(
-		TEXT("/Engine/BasicShapes/Cube.Cube"));
-	if (CubeMesh.Succeeded())
-		MeshComponent->SetStaticMesh(CubeMesh.Object);
+	VisualMesh = CreateDefaultSubobject<UPoseableMeshComponent>(TEXT("VisualMesh"));
+	VisualMesh->SetupAttachment(PhysicsBody);
+	VisualMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	VisualMesh->SetSimulatePhysics(false);
 
-	// Flat box proportions: 50cm wide, 50cm deep, 10cm tall — drone-like footprint.
-	MeshComponent->SetRelativeScale3D(FVector(0.5f, 0.5f, 0.1f));
-	MeshComponent->SetSimulatePhysics(true);
-	MeshComponent->SetEnableGravity(true);
+	MotorAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("MotorAudio"));
+	MotorAudio->SetupAttachment(PhysicsBody);
+	MotorAudio->bAutoActivate = false;
 
-	// Chase camera — spring arm behind and above, level regardless of drone attitude.
 	SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
-	SpringArm->SetupAttachment(RootComponent);
-	SpringArm->TargetArmLength = 500.0f;
-	SpringArm->SocketOffset    = FVector(0.0f, 0.0f, 150.0f);
-	SpringArm->bInheritPitch        = false;
-	SpringArm->bInheritRoll         = false;
-	SpringArm->bInheritYaw          = true;
-	SpringArm->bDoCollisionTest     = true;
-	SpringArm->bEnableCameraLag     = true;
-	SpringArm->CameraLagSpeed       = 10.0f;
-	SpringArm->CameraLagMaxDistance = 300.0f;
+	SpringArm->SetupAttachment(PhysicsBody);
+	SpringArm->TargetArmLength = 180.0f;
+	SpringArm->SocketOffset    = FVector(0.0f, 0.0f, 20.0f);
+	SpringArm->SetRelativeRotation(FRotator(-15.0f, 0.0f, 0.0f));
+	SpringArm->bInheritPitch    = false;
+	SpringArm->bInheritRoll     = false;
+	SpringArm->bInheritYaw      = true;
+	SpringArm->bDoCollisionTest = true;
+	SpringArm->bEnableCameraLag = false;
 
 	ChaseCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ChaseCamera"));
 	ChaseCamera->SetupAttachment(SpringArm, USpringArmComponent::SocketName);
 	ChaseCamera->SetActive(true);
 
-	// FPV camera — fixed at the drone nose between the two front arms, tilts with the drone.
+	auto MakeBlade = [&](const TCHAR* Name) -> UStaticMeshComponent*
+	{
+		UStaticMeshComponent* Comp = CreateDefaultSubobject<UStaticMeshComponent>(Name);
+		Comp->SetupAttachment(VisualMesh);
+		Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		return Comp;
+	};
+	PropFL_A = MakeBlade(TEXT("PropFL_A")); PropFL_B = MakeBlade(TEXT("PropFL_B"));
+	PropFR_A = MakeBlade(TEXT("PropFR_A")); PropFR_B = MakeBlade(TEXT("PropFR_B"));
+	PropRL_A = MakeBlade(TEXT("PropRL_A")); PropRL_B = MakeBlade(TEXT("PropRL_B"));
+	PropRR_A = MakeBlade(TEXT("PropRR_A")); PropRR_B = MakeBlade(TEXT("PropRR_B"));
+
 	FPVCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FPVCamera"));
-	FPVCamera->SetupAttachment(RootComponent);
-	FPVCamera->SetRelativeLocation(FVector(25.0f, 0.0f, 8.0f));
+	FPVCamera->SetupAttachment(VisualMesh);
+	FPVCamera->SetRelativeLocation(FVector(18.0f, 0.0f, 9.0f));
+	FPVCamera->SetRelativeRotation(FRotator(-15.0f, 0.0f, 0.0f));
+	FPVCamera->FieldOfView = 90.0f;
 	FPVCamera->SetActive(false);
 }
 
@@ -55,11 +72,46 @@ void ADroneActor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	MeshComponent->SetMassOverrideInKg(NAME_None, Mass);
-	MeshComponent->SetLinearDamping(LinearDamping);
-	MeshComponent->SetAngularDamping(AngularDamping);
+	PhysicsBody->SetMassOverrideInKg(NAME_None, Mass);
+	PhysicsBody->SetLinearDamping(LinearDamping);
+	PhysicsBody->SetAngularDamping(AngularDamping);
 
 	InitHoverThrottle();
+
+	if (PropellerMesh_CCW)
+	{
+		PropFL_A->SetStaticMesh(PropellerMesh_CCW); PropFL_B->SetStaticMesh(PropellerMesh_CCW);
+		PropRR_A->SetStaticMesh(PropellerMesh_CCW); PropRR_B->SetStaticMesh(PropellerMesh_CCW);
+	}
+	if (PropellerMesh_CW)
+	{
+		PropFR_A->SetStaticMesh(PropellerMesh_CW); PropFR_B->SetStaticMesh(PropellerMesh_CW);
+		PropRL_A->SetStaticMesh(PropellerMesh_CW); PropRL_B->SetStaticMesh(PropellerMesh_CW);
+	}
+
+	static const FName PropBones[4] = {
+		TEXT("LeftFrontPropeller1"), TEXT("RightFrontPropeller1"),
+		TEXT("LeftBackPropeller1"),  TEXT("RightBackPropeller1"),
+	};
+	UStaticMeshComponent* BladesA[4] = { PropFL_A, PropFR_A, PropRL_A, PropRR_A };
+	UStaticMeshComponent* BladesB[4] = { PropFL_B, PropFR_B, PropRL_B, PropRR_B };
+
+	for (int32 i = 0; i < 4; ++i)
+	{
+		const FVector BonePos = VisualMesh->GetBoneLocation(PropBones[i], EBoneSpaces::ComponentSpace);
+		BladesA[i]->SetRelativeLocation(BonePos);
+		BladesB[i]->SetRelativeLocation(BonePos);
+	}
+
+	if (MotorLoopSound)
+	{
+		MotorAudio->SetSound(MotorLoopSound);
+		MotorAudio->SetPitchMultiplier(0.6f);
+		MotorAudio->Play();
+	}
+
+	if (StartupSound)
+		UGameplayStatics::PlaySoundAtLocation(this, StartupSound, GetActorLocation());
 }
 
 void ADroneActor::PossessedBy(AController* NewController)
@@ -133,8 +185,6 @@ void ADroneActor::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
 		EIC->BindAction(IA_SwitchCamera, ETriggerEvent::Started, this, &ADroneActor::OnSwitchCamera);
 }
 
-// --- Input callbacks ---
-
 void ADroneActor::OnThrottle(const FInputActionValue& Value)
 {
 	ControlInput.Throttle = Value.Get<float>();
@@ -147,9 +197,9 @@ void ADroneActor::OnThrottleCompleted(const FInputActionValue&)
 
 void ADroneActor::OnPitchRoll(const FInputActionValue& Value)
 {
-	const FVector2D Axis   = Value.Get<FVector2D>();
-	ControlInput.Pitch     = Axis.X;
-	ControlInput.Roll      = Axis.Y;
+	const FVector2D Axis = Value.Get<FVector2D>();
+	ControlInput.Pitch   = Axis.X;
+	ControlInput.Roll    = Axis.Y;
 }
 
 void ADroneActor::OnPitchRollCompleted(const FInputActionValue&)
@@ -175,54 +225,84 @@ void ADroneActor::OnSwitchCamera(const FInputActionValue&)
 	FPVCamera->SetActive(bFPVMode);
 }
 
-// --- Tick ---
-
 void ADroneActor::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (!MeshComponent || !MeshComponent->IsSimulatingPhysics())
+	if (!PhysicsBody || !PhysicsBody->IsSimulatingPhysics())
 		return;
 
-	// Angular velocity in drone body frame (deg/s): X=roll, Y=pitch, Z=yaw.
-	const FVector WorldAngVelDeg = MeshComponent->GetPhysicsAngularVelocityInDegrees();
+	const FVector WorldAngVelDeg = PhysicsBody->GetPhysicsAngularVelocityInDegrees();
 	const FVector BodyAngVelDeg  = GetActorRotation().UnrotateVector(WorldAngVelDeg);
 
-	FlightController.Update(ControlInput, BodyAngVelDeg, DeltaTime, RotorThrottle);
+	const FRotator ActorRot  = GetActorRotation();
+	const FVector  AttitudeDeg(ActorRot.Roll, ActorRot.Pitch, ActorRot.Yaw);
+
+	FlightController.Update(ControlInput, AttitudeDeg, BodyAngVelDeg, DeltaTime, RotorThrottle);
 	ApplyRotorForces();
+	UpdateRotorVisuals(DeltaTime);
+	UpdateMotorAudio();
 }
 
 void ADroneActor::ApplyRotorForces()
 {
-	// Rotor positions in drone body frame (cm). X=forward, Y=right.
-	// Order: FL(0), FR(1), RL(2), RR(3).
 	const FVector RotorOffsets[4] = {
-		FVector( ArmLength, -ArmLength, 0.0f), // FL
-		FVector( ArmLength,  ArmLength, 0.0f), // FR
-		FVector(-ArmLength, -ArmLength, 0.0f), // RL
-		FVector(-ArmLength,  ArmLength, 0.0f), // RR
+		FVector( ArmLength, -ArmLength, 0.0f),
+		FVector( ArmLength,  ArmLength, 0.0f),
+		FVector(-ArmLength, -ArmLength, 0.0f),
+		FVector(-ArmLength,  ArmLength, 0.0f),
 	};
 
-	// +1 = CCW rotor (produces positive / CW yaw reaction torque).
-	// -1 = CW  rotor (produces negative / CCW yaw reaction torque).
 	static constexpr float YawSpin[4] = { 1.0f, -1.0f, -1.0f, 1.0f };
 
-	const FQuat   ActorQuat    = GetActorQuat();
-	const FVector LocalUp      = GetActorUpVector();
+	const FQuat   ActorQuat      = GetActorQuat();
+	const FVector LocalUp        = GetActorUpVector();
 	FVector       TotalYawTorque = FVector::ZeroVector;
 
 	for (int32 i = 0; i < 4; ++i)
 	{
 		const float Thrust = RotorThrottle[i] * MaxThrustPerRotor;
 
-		// Apply thrust at rotor's world-space position so roll/pitch torques arise naturally.
 		const FVector WorldOffset = ActorQuat.RotateVector(RotorOffsets[i]);
 		const FVector WorldPos    = GetActorLocation() + WorldOffset;
-		MeshComponent->AddForceAtLocation(LocalUp * Thrust, WorldPos, NAME_None);
+		PhysicsBody->AddForceAtLocation(LocalUp * Thrust, WorldPos, NAME_None);
 
-		// Accumulate yaw reaction torque (CCW/CW drag from spinning rotors).
 		TotalYawTorque += LocalUp * (YawSpin[i] * RotorThrottle[i] * YawTorqueCoeff);
 	}
 
-	MeshComponent->AddTorqueInRadians(TotalYawTorque, NAME_None, false);
+	PhysicsBody->AddTorqueInRadians(TotalYawTorque, NAME_None, false);
+}
+
+void ADroneActor::UpdateRotorVisuals(float DeltaTime)
+{
+	UStaticMeshComponent* BladesA[4] = { PropFL_A, PropFR_A, PropRL_A, PropRR_A };
+	UStaticMeshComponent* BladesB[4] = { PropFL_B, PropFR_B, PropRL_B, PropRR_B };
+	static constexpr float SpinDir[4] = { 1.0f, -1.0f, -1.0f, 1.0f };
+
+	for (int32 i = 0; i < 4; ++i)
+	{
+		const float TargetRate = RotorThrottle[i] * MaxSpinRate;
+		RotorCurrentSpinRate[i] = FMath::FInterpTo(RotorCurrentSpinRate[i], TargetRate, DeltaTime, MotorSpoolRate);
+
+		RotorSpinAngle[i] = FMath::Fmod(
+			RotorSpinAngle[i] + RotorCurrentSpinRate[i] * SpinDir[i] * DeltaTime,
+			360.0f);
+
+		if (BladesA[i]) BladesA[i]->SetRelativeRotation(FRotator(0.0f, RotorSpinAngle[i],          0.0f));
+		if (BladesB[i]) BladesB[i]->SetRelativeRotation(FRotator(0.0f, RotorSpinAngle[i] + 180.0f, 0.0f));
+	}
+}
+
+void ADroneActor::UpdateMotorAudio()
+{
+	if (!MotorAudio || !MotorAudio->IsActive())
+		return;
+
+	float AvgThrottle = 0.0f;
+	for (float T : RotorThrottle)
+		AvgThrottle += T;
+	AvgThrottle *= 0.25f;
+
+	const float PitchMult = FMath::Lerp(0.6f, 1.8f, AvgThrottle);
+	MotorAudio->SetPitchMultiplier(PitchMult);
 }

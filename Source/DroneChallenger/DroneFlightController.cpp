@@ -3,17 +3,21 @@
 
 void FDroneFlightController::Update(
 	const FDroneControlInput& Input,
+	const FVector& AttitudeDeg,
 	const FVector& AngularVelocityBodyDeg,
 	float DeltaTime,
 	float OutThrottle[4])
 {
 	const float ThrottleCmd = FMath::Clamp(HoverThrottle + Input.Throttle * ThrottleRange, 0.0f, 1.0f);
 
-	const float DesiredPitchRate = Input.Pitch * MaxPitchRate;
-	const float DesiredRollRate  = Input.Roll  * MaxRollRate;
-	const float DesiredYawRate   = Input.Yaw   * MaxYawRate;
+	const float DesiredPitchAngle = Input.Pitch * MaxTiltAngle;
+	const float DesiredRollAngle  = Input.Roll  * MaxTiltAngle;
 
-	// Body-frame angular velocity: X = roll rate, Y = pitch rate, Z = yaw rate.
+	const float DesiredPitchRate = (DesiredPitchAngle - AttitudeDeg.Y) * AngleGain;
+	const float DesiredRollRate  = (DesiredRollAngle  - AttitudeDeg.X) * AngleGain;
+
+	const float DesiredYawRate = Input.Yaw * MaxYawRate;
+
 	const float PitchRateError = DesiredPitchRate - AngularVelocityBodyDeg.Y;
 	const float RollRateError  = DesiredRollRate  - AngularVelocityBodyDeg.X;
 	const float YawRateError   = DesiredYawRate   - AngularVelocityBodyDeg.Z;
