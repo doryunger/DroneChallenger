@@ -9,6 +9,12 @@ class UInputMappingContext;
 class UInputAction;
 class USpringArmComponent;
 class UCameraComponent;
+class UBoxComponent;
+class UPoseableMeshComponent;
+class UStaticMeshComponent;
+class UStaticMesh;
+class UAudioComponent;
+class USoundBase;
 struct FInputActionValue;
 
 UCLASS()
@@ -28,25 +34,23 @@ protected:
 
 private:
 	UPROPERTY(VisibleAnywhere, Category = "Components")
-	TObjectPtr<UStaticMeshComponent> MeshComponent;
+	TObjectPtr<UBoxComponent> PhysicsBody;
 
-	// --- Input assets: create in editor, assign in Details panel ---
-	UPROPERTY(EditAnywhere, Category = "Drone|Input")
-	TObjectPtr<UInputMappingContext> InputMappingContext;
+	UPROPERTY(VisibleAnywhere, Category = "Components")
+	TObjectPtr<UPoseableMeshComponent> VisualMesh;
 
-	UPROPERTY(EditAnywhere, Category = "Drone|Input")
-	TObjectPtr<UInputAction> IA_Throttle;  // Axis1D — W/S or gamepad left stick Y
+	UPROPERTY(VisibleAnywhere, Category = "Components") TObjectPtr<UStaticMeshComponent> PropFL_A;
+	UPROPERTY(VisibleAnywhere, Category = "Components") TObjectPtr<UStaticMeshComponent> PropFL_B;
+	UPROPERTY(VisibleAnywhere, Category = "Components") TObjectPtr<UStaticMeshComponent> PropFR_A;
+	UPROPERTY(VisibleAnywhere, Category = "Components") TObjectPtr<UStaticMeshComponent> PropFR_B;
+	UPROPERTY(VisibleAnywhere, Category = "Components") TObjectPtr<UStaticMeshComponent> PropRL_A;
+	UPROPERTY(VisibleAnywhere, Category = "Components") TObjectPtr<UStaticMeshComponent> PropRL_B;
+	UPROPERTY(VisibleAnywhere, Category = "Components") TObjectPtr<UStaticMeshComponent> PropRR_A;
+	UPROPERTY(VisibleAnywhere, Category = "Components") TObjectPtr<UStaticMeshComponent> PropRR_B;
 
-	UPROPERTY(EditAnywhere, Category = "Drone|Input")
-	TObjectPtr<UInputAction> IA_PitchRoll; // Axis2D — arrow keys or gamepad right stick
+	UPROPERTY(VisibleAnywhere, Category = "Components")
+	TObjectPtr<UAudioComponent> MotorAudio;
 
-	UPROPERTY(EditAnywhere, Category = "Drone|Input")
-	TObjectPtr<UInputAction> IA_Yaw;          // Axis1D — Q/E or gamepad left stick X
-
-	UPROPERTY(EditAnywhere, Category = "Drone|Input")
-	TObjectPtr<UInputAction> IA_SwitchCamera; // Digital — C key; toggles FPV / chase
-
-	// --- Cameras ---
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	TObjectPtr<USpringArmComponent> SpringArm;
 
@@ -56,9 +60,33 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	TObjectPtr<UCameraComponent> FPVCamera;
 
-	bool bFPVMode = false;
+	UPROPERTY(EditAnywhere, Category = "Drone|Rotors")
+	TObjectPtr<UStaticMesh> PropellerMesh_CCW;
 
-	// --- Physics ---
+	UPROPERTY(EditAnywhere, Category = "Drone|Rotors")
+	TObjectPtr<UStaticMesh> PropellerMesh_CW;
+
+	UPROPERTY(EditAnywhere, Category = "Drone|Audio")
+	TObjectPtr<USoundBase> MotorLoopSound;
+
+	UPROPERTY(EditAnywhere, Category = "Drone|Audio")
+	TObjectPtr<USoundBase> StartupSound;
+
+	UPROPERTY(EditAnywhere, Category = "Drone|Input")
+	TObjectPtr<UInputMappingContext> InputMappingContext;
+
+	UPROPERTY(EditAnywhere, Category = "Drone|Input")
+	TObjectPtr<UInputAction> IA_Throttle;
+
+	UPROPERTY(EditAnywhere, Category = "Drone|Input")
+	TObjectPtr<UInputAction> IA_PitchRoll;
+
+	UPROPERTY(EditAnywhere, Category = "Drone|Input")
+	TObjectPtr<UInputAction> IA_Yaw;
+
+	UPROPERTY(EditAnywhere, Category = "Drone|Input")
+	TObjectPtr<UInputAction> IA_SwitchCamera;
+
 	UPROPERTY(EditAnywhere, Category = "Drone|Physics", meta = (ClampMin = "0.1"))
 	float Mass = 1.5f;
 
@@ -71,24 +99,32 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Drone|Physics", meta = (ClampMin = "0.0"))
 	float AngularDamping = 5.0f;
 
-	// Distance from drone centre to each rotor, along each body axis (cm).
 	UPROPERTY(EditAnywhere, Category = "Drone|Physics", meta = (ClampMin = "1.0"))
-	float ArmLength = 25.0f;
+	float ArmLength = 32.5f;
 
-	// Yaw reaction torque produced per rotor per unit throttle (kg*cm²/s²).
-	UPROPERTY(EditAnywhere, Category = "Drone|Physics", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, Category = "Drone|Physics")
 	float YawTorqueCoeff = 3000.0f;
 
-	// --- Flight controller ---
+	UPROPERTY(EditAnywhere, Category = "Drone|Rotors", meta = (ClampMin = "0.0"))
+	float MaxSpinRate = 4320.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Drone|Rotors", meta = (ClampMin = "0.1"))
+	float MotorSpoolRate = 8.0f;
+
 	FDroneFlightController FlightController;
-	float RotorThrottle[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float RotorThrottle[4]        = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float RotorSpinAngle[4]       = { 0.0f, 0.0f, 0.0f, 0.0f };
+	float RotorCurrentSpinRate[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	FDroneControlInput ControlInput;
+
+	bool bFPVMode = false;
 
 	void InitHoverThrottle();
 	void ApplyRotorForces();
+	void UpdateRotorVisuals(float DeltaTime);
+	void UpdateMotorAudio();
 	void RegisterInputMappingContext(AController* InController);
 
-	// Input callbacks
 	void OnThrottle(const FInputActionValue& Value);
 	void OnThrottleCompleted(const FInputActionValue& Value);
 	void OnPitchRoll(const FInputActionValue& Value);

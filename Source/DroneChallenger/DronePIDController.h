@@ -12,7 +12,6 @@ struct FDronePID
 	float Integral = 0.0f;
 	float PrevMeasurement = 0.0f;
 
-	// Derivative is computed on measurement (not error) to avoid kick on setpoint changes.
 	float Update(float Error, float Measurement, float DeltaTime)
 	{
 		Integral = FMath::Clamp(Integral + Error * DeltaTime, -IntegralLimit, IntegralLimit);

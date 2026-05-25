@@ -14,11 +14,10 @@ void ATerrainProbe::SampleTestPositions()
 		return;
 	}
 
-	// X = Longitude, Y = Latitude, Z = fallback height if sampling fails
 	TArray<FVector> Points = {
-		FVector(11.5755, 48.1374, 0.0),  // Marienplatz (city centre)
-		FVector(11.5735, 48.1386, 0.0),  // Frauenkirche
-		FVector(11.6012, 48.1200, 0.0),  // Haidhausen (east)
+		FVector(11.5755, 48.1374, 0.0),
+		FVector(11.5735, 48.1386, 0.0),
+		FVector(11.6012, 48.1200, 0.0),
 	};
 
 	FCesiumSampleHeightMostDetailedCallback Callback;
