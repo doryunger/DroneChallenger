@@ -68,6 +68,14 @@ A feature is not done when it compiles and PIE launches without crashing. It is 
 
 Before marking any phase complete, explicitly ask: *what would break this in a real flight session?* If the answer is non-trivial, the phase is not complete.
 
+## Comments and documentation
+
+Source files contain no comments of any kind — no inline `//`, no block `/* */`, no docstrings.
+
+If design context, sign conventions, or non-obvious constraints need to be recorded, they go in a Markdown file under `context/`. Each file in `context/` covers one system. The source files are the implementation; `context/` is the explanation.
+
+When editing an existing file, remove any comments you encounter. When creating a new file, write none.
+
 ## What not to do
 
 - Do not add features beyond what the current step requires
@@ -75,3 +83,4 @@ Before marking any phase complete, explicitly ask: *what would break this in a r
 - Do not hard-code world coordinates — use Cesium georeferencing
 - Do not declare a feature "done" when it only works in an empty level with no terrain streaming
 - Do not build the drone controller and the physics model as if they are independent — they must be designed together
+- Do not write comments in source files — use `context/` instead
