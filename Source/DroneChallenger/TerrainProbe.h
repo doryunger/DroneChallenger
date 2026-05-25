@@ -15,6 +15,10 @@ class DRONECHALLENGER_API ATerrainProbe : public AActor
 public:
 	ATerrainProbe();
 
+protected:
+	virtual void BeginPlay() override;
+
+public:
 	UPROPERTY(EditAnywhere, Category = "Terrain Probe")
 	TObjectPtr<ACesium3DTileset> Tileset;
 
