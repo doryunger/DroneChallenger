@@ -52,6 +52,10 @@ Content/RealisticDroneV2/
 Content/__ExternalActors__/RealisticDroneV2/
 Content/__ExternalObjects__/RealisticDroneV2/
 
+# ArboristLib — prebuilt outputs populated by setup script at Phase 9; not version-controlled
+Source/ThirdParty/ArboristLib/lib/
+Source/ThirdParty/ArboristLib/include/
+
 # OS
 Thumbs.db
 .DS_Store

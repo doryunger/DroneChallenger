@@ -156,12 +156,16 @@ Implemented `ATerrainProbe` — an editor utility actor that calls `ACesium3DTil
 
 **Goal**: Arborist running inside UE5, three BT-driven targets in the Munich playspace, live BT visualiser in-game.
 
-#### 6a — Arborist in UE5
+#### 6a — Arborist in UE5 ✅
 
-- Add Arborist as a git submodule: `Source/ThirdParty/Arborist/`
-- Configure `Build.cs` to compile Arborist sources via UBT and link its third-party dependencies (`yaml-cpp`, `SQLite3`)
-- Add `WebBrowser` to the UE5 plugin list (for the visualiser panel in Phase 7)
-- Smoke test: tick a trivial tree from a UE5 actor's `BeginPlay`, confirm SUCCESS logged
+Arborist is integrated as a **prebuilt External UBT module** (`Source/ThirdParty/ArboristLib/`).
+
+- `arborist.lib` (33 MB) combines Arborist + yaml-cpp 0.8.0 + sqlite3 amalgamation, built once with cmake + MSVC from the standalone clone at `C:/Users/Shadow/Projects/arborist/`
+- `ArboristLib.Build.cs` registers the lib and public headers as `ModuleType.External`
+- `lib/` and `include/` are gitignored — populated by a setup script (deferred to Phase 9)
+- `WebBrowserWidget` plugin added to uproject; `WebBrowser` module added to `Build.cs`
+- Two bugs found and fixed in the Arborist repo: missing `#include <algorithm>` in `ScenarioRunner.cpp`; `Severity::ERROR` / `Severity::WARNING` enum values renamed to `kError` / `kWarning` to avoid Windows SDK macro collision when `httplib.h` pulls in `windows.h`
+- Smoke test: `ATerrainProbe::BeginPlay` ticks a one-action tree and logs `ArboristLib smoke test: PASS`
 
 **Done when**: project compiles cleanly with Arborist linked; a minimal tree ticks without crash in PIE.
 
@@ -245,7 +249,7 @@ New files: `SearchDestroyGameMode.h/.cpp`, `SearchDestroyGameState.h/.cpp`
 
 - Main menu level (start, settings, quit)
 - `RealisticDroneV2` cooked into build (gitignored, baked at package time)
-- Arborist submodule included in source; compiled by UBT during cook
+- **Arborist setup script** (`setup.ps1`): clones `github.com/doryunger/arborist`, builds `arborist.lib` with cmake + MSVC, copies lib and public headers into `Source/ThirdParty/ArboristLib/lib/Win64/` and `include/` — must run once before opening the project on a fresh machine
 - MonitorServer and EditorServer disabled in shipping build (`#if !UE_BUILD_SHIPPING`)
 - Windows 64-bit shipping configuration; Cesium streaming budget tuned for 2 km playspace
 - Frame-rate floor check: stable 60 FPS during active BT ticking + terrain streaming
@@ -259,7 +263,7 @@ New files: `SearchDestroyGameMode.h/.cpp`, `SearchDestroyGameState.h/.cpp`
 | Yaw direction (CW vs CCW) unverified in-engine | Needs one PIE test — if yaw-right turns left, negate `YawSpin[4]` in `ApplyRotorForces` |
 | Target vehicle mesh not chosen | Any static mesh assignable to `ATargetActor` in editor |
 | Drone spawn altitude | Currently editor-placed Z; should be terrain-sampled via Cesium before Phase 6b |
-| Arborist yaml-cpp / SQLite3 vendoring | Need to confirm UBT can link these; may need to vendor as ThirdParty static libs |
+| Arborist setup script | Written in Phase 9 — clones arborist repo, builds lib, populates ThirdParty dirs |
 | MonitorServer multi-target switching | One server, one tree at a time — switching requires `monitor.attachTree(&newTree)` |
 
 ---
