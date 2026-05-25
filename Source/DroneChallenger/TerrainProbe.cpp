@@ -1,9 +1,39 @@
 #include "TerrainProbe.h"
 #include "Cesium3DTileset.h"
 
+THIRD_PARTY_INCLUDES_START
+#include "bt/SchemaLoader.h"
+#include "bt/Status.h"
+THIRD_PARTY_INCLUDES_END
+
 ATerrainProbe::ATerrainProbe()
 {
 	PrimaryActorTick.bCanEverTick = false;
+}
+
+void ATerrainProbe::BeginPlay()
+{
+	Super::BeginPlay();
+
+	static const std::string SmokeYaml = R"(
+sequence:
+  - action: ping
+)";
+
+	bt::LoaderRegistry Reg;
+	Reg.actions["ping"] = []() { return bt::Status::SUCCESS; };
+
+	bt::BehaviorTree Tree = bt::SchemaLoader::load(SmokeYaml, Reg);
+	bt::Status Result = Tree.tick();
+
+	if (Result == bt::Status::SUCCESS)
+	{
+		UE_LOG(LogTemp, Log, TEXT("ArboristLib smoke test: PASS"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("ArboristLib smoke test: FAIL — unexpected status"));
+	}
 }
 
 void ATerrainProbe::SampleTestPositions()
