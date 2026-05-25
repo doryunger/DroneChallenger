@@ -53,7 +53,7 @@ Key rules for the simulation:
 - Flight physics run on the server (or authority) and replicate state to clients — never compute authoritative physics client-side
 - Drone input is processed through UE's Enhanced Input system; no legacy `BindAxis` / `BindAction`
 - Cesium tile streaming budget and LOD settings are configured in C++, not left at editor defaults
-- All geographic coordinates are stored as `FVector` latitude/longitude/altitude and converted at the georeferenced actor boundary — never mix coordinate spaces
+- All geographic coordinates are stored as `FVector` (X = longitude, Y = latitude, Z = altitude above ellipsoid in metres) and converted at the georeferenced actor boundary — never mix coordinate spaces
 
 ## Quality standard
 
