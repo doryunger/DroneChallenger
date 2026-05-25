@@ -1,5 +1,7 @@
 #include "DroneActor.h"
 #include "Components/StaticMeshComponent.h"
+#include "GameFramework/SpringArmComponent.h"
+#include "Camera/CameraComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
@@ -24,6 +26,29 @@ ADroneActor::ADroneActor()
 	MeshComponent->SetRelativeScale3D(FVector(0.5f, 0.5f, 0.1f));
 	MeshComponent->SetSimulatePhysics(true);
 	MeshComponent->SetEnableGravity(true);
+
+	// Chase camera — spring arm behind and above, level regardless of drone attitude.
+	SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
+	SpringArm->SetupAttachment(RootComponent);
+	SpringArm->TargetArmLength = 500.0f;
+	SpringArm->SocketOffset    = FVector(0.0f, 0.0f, 150.0f);
+	SpringArm->bInheritPitch        = false;
+	SpringArm->bInheritRoll         = false;
+	SpringArm->bInheritYaw          = true;
+	SpringArm->bDoCollisionTest     = true;
+	SpringArm->bEnableCameraLag     = true;
+	SpringArm->CameraLagSpeed       = 10.0f;
+	SpringArm->CameraLagMaxDistance = 300.0f;
+
+	ChaseCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ChaseCamera"));
+	ChaseCamera->SetupAttachment(SpringArm, USpringArmComponent::SocketName);
+	ChaseCamera->SetActive(true);
+
+	// FPV camera — fixed at the drone nose between the two front arms, tilts with the drone.
+	FPVCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FPVCamera"));
+	FPVCamera->SetupAttachment(RootComponent);
+	FPVCamera->SetRelativeLocation(FVector(25.0f, 0.0f, 8.0f));
+	FPVCamera->SetActive(false);
 }
 
 void ADroneActor::BeginPlay()
@@ -104,6 +129,8 @@ void ADroneActor::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
 		EIC->BindAction(IA_Yaw, ETriggerEvent::Triggered, this, &ADroneActor::OnYaw);
 		EIC->BindAction(IA_Yaw, ETriggerEvent::Completed, this, &ADroneActor::OnYawCompleted);
 	}
+	if (IA_SwitchCamera)
+		EIC->BindAction(IA_SwitchCamera, ETriggerEvent::Started, this, &ADroneActor::OnSwitchCamera);
 }
 
 // --- Input callbacks ---
@@ -139,6 +166,13 @@ void ADroneActor::OnYaw(const FInputActionValue& Value)
 void ADroneActor::OnYawCompleted(const FInputActionValue&)
 {
 	ControlInput.Yaw = 0.0f;
+}
+
+void ADroneActor::OnSwitchCamera(const FInputActionValue&)
+{
+	bFPVMode = !bFPVMode;
+	ChaseCamera->SetActive(!bFPVMode);
+	FPVCamera->SetActive(bFPVMode);
 }
 
 // --- Tick ---
