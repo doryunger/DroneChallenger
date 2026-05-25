@@ -42,6 +42,11 @@ Content/Untitled_HLOD0_Instancing.uasset
 Content/__ExternalActors__/Untitled/
 Content/__ExternalObjects__/Untitled/
 
+# ThirdPerson template map — not used in this project
+Content/ThirdPerson/
+Content/__ExternalActors__/ThirdPerson/
+Content/__ExternalObjects__/ThirdPerson/
+
 # RealisticDroneV2 — large asset pack (>400 MB); baked into packaged build, not version-controlled
 Content/RealisticDroneV2/
 Content/__ExternalActors__/RealisticDroneV2/
