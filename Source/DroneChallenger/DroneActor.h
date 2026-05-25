@@ -7,6 +7,8 @@
 
 class UInputMappingContext;
 class UInputAction;
+class USpringArmComponent;
+class UCameraComponent;
 struct FInputActionValue;
 
 UCLASS()
@@ -39,7 +41,22 @@ private:
 	TObjectPtr<UInputAction> IA_PitchRoll; // Axis2D — arrow keys or gamepad right stick
 
 	UPROPERTY(EditAnywhere, Category = "Drone|Input")
-	TObjectPtr<UInputAction> IA_Yaw;       // Axis1D — Q/E or gamepad left stick X
+	TObjectPtr<UInputAction> IA_Yaw;          // Axis1D — Q/E or gamepad left stick X
+
+	UPROPERTY(EditAnywhere, Category = "Drone|Input")
+	TObjectPtr<UInputAction> IA_SwitchCamera; // Digital — C key; toggles FPV / chase
+
+	// --- Cameras ---
+	UPROPERTY(VisibleAnywhere, Category = "Components")
+	TObjectPtr<USpringArmComponent> SpringArm;
+
+	UPROPERTY(VisibleAnywhere, Category = "Components")
+	TObjectPtr<UCameraComponent> ChaseCamera;
+
+	UPROPERTY(VisibleAnywhere, Category = "Components")
+	TObjectPtr<UCameraComponent> FPVCamera;
+
+	bool bFPVMode = false;
 
 	// --- Physics ---
 	UPROPERTY(EditAnywhere, Category = "Drone|Physics", meta = (ClampMin = "0.1"))
@@ -78,4 +95,5 @@ private:
 	void OnPitchRollCompleted(const FInputActionValue& Value);
 	void OnYaw(const FInputActionValue& Value);
 	void OnYawCompleted(const FInputActionValue& Value);
+	void OnSwitchCamera(const FInputActionValue& Value);
 };
