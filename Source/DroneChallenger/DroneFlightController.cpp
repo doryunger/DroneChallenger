@@ -8,13 +8,16 @@ void FDroneFlightController::Update(
 	float DeltaTime,
 	float OutThrottle[4])
 {
-	const float ThrottleCmd = FMath::Clamp(HoverThrottle + Input.Throttle * ThrottleRange, 0.0f, 1.0f);
+	const float TiltDeg  = FMath::Sqrt(AttitudeDeg.X * AttitudeDeg.X + AttitudeDeg.Y * AttitudeDeg.Y);
+	const float TiltRad  = FMath::DegreesToRadians(FMath::Min(TiltDeg, 60.0f));
+	const float TiltComp = 1.0f / FMath::Max(FMath::Cos(TiltRad), 0.5f);
+	const float ThrottleCmd = FMath::Clamp((HoverThrottle + Input.Throttle * ThrottleRange) * TiltComp, 0.0f, 1.0f);
 
 	const float DesiredPitchAngle = Input.Pitch * MaxTiltAngle;
 	const float DesiredRollAngle  = Input.Roll  * MaxTiltAngle;
 
-	const float DesiredPitchRate = FMath::Clamp((DesiredPitchAngle - AttitudeDeg.Y) * AngleGain, -MaxAngleCorrectionRate, MaxAngleCorrectionRate);
-	const float DesiredRollRate  = FMath::Clamp((DesiredRollAngle  - AttitudeDeg.X) * AngleGain, -MaxAngleCorrectionRate, MaxAngleCorrectionRate);
+	const float DesiredPitchRate = FMath::Clamp((DesiredPitchAngle - AttitudeDeg.Y) * AngleGain, -MaxAngularRate, MaxAngularRate);
+	const float DesiredRollRate  = FMath::Clamp((DesiredRollAngle  - AttitudeDeg.X) * AngleGain, -MaxAngularRate, MaxAngularRate);
 
 	const float DesiredYawRate = Input.Yaw * MaxYawRate;
 
