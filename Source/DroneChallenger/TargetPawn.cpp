@@ -1,4 +1,6 @@
-#include "TargetActor.h"
+#include "TargetPawn.h"
+#include "TargetAIController.h"
+#include "PatrolPath.h"
 #include "Windows/WindowsHWrapper.h"
 #ifdef OPAQUE
 #undef OPAQUE
@@ -9,6 +11,7 @@
 #include "CesiumGlobeAnchorComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
+#include "Components/SplineComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/FileHelper.h"
@@ -21,7 +24,7 @@ THIRD_PARTY_INCLUDES_START
 #include "bt/Status.h"
 THIRD_PARTY_INCLUDES_END
 
-ATargetActor::ATargetActor()
+ATargetPawn::ATargetPawn()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
@@ -34,15 +37,18 @@ ATargetActor::ATargetActor()
 	Beacon->SetVisibility(false);
 
 	GlobeAnchor = CreateDefaultSubobject<UCesiumGlobeAnchorComponent>(TEXT("GlobeAnchor"));
+
+	AIControllerClass = ATargetAIController::StaticClass();
+	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 }
 
-ATargetActor::~ATargetActor()
+ATargetPawn::~ATargetPawn()
 {
 	delete Tree;
 	Tree = nullptr;
 }
 
-void ATargetActor::BeginPlay()
+void ATargetPawn::BeginPlay()
 {
 	Super::BeginPlay();
 
@@ -50,7 +56,7 @@ void ATargetActor::BeginPlay()
 	BuildTree();
 }
 
-void ATargetActor::Tick(float DeltaTime)
+void ATargetPawn::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
@@ -61,22 +67,40 @@ void ATargetActor::Tick(float DeltaTime)
 	Tree->tick();
 }
 
-void ATargetActor::BuildTree()
+void ATargetPawn::BuildTree()
 {
 	FString FilePath = FPaths::ProjectContentDir() / TEXT("BT/target.yaml");
 	FString YamlContent;
 
 	if (!FFileHelper::LoadFileToString(YamlContent, *FilePath))
 	{
-		UE_LOG(LogTemp, Error, TEXT("TargetActor: failed to load %s"), *FilePath);
+		UE_LOG(LogTemp, Error, TEXT("TargetPawn: failed to load %s"), *FilePath);
 		return;
 	}
 
 	bt::LoaderRegistry Reg;
 
-	Reg.actions["idle"] = [this]() -> bt::Status
+	Reg.actions["stop"] = [this]() -> bt::Status
 	{
-		Beacon->SetVisibility(false);
+		CurrentSpeed = 0.0f;
+		return bt::Status::SUCCESS;
+	};
+
+	Reg.actions["set_speed_normal"] = [this]() -> bt::Status
+	{
+		CurrentSpeed = PatrolSpeed;
+		return bt::Status::SUCCESS;
+	};
+
+	Reg.actions["set_speed_fast"] = [this]() -> bt::Status
+	{
+		CurrentSpeed = EvadeSpeed;
+		return bt::Status::SUCCESS;
+	};
+
+	Reg.actions["advance_along_path"] = [this]() -> bt::Status
+	{
+		AdvanceAlongPath();
 		return bt::Status::SUCCESS;
 	};
 
@@ -126,7 +150,7 @@ void ATargetActor::BuildTree()
 	Tree = new bt::BehaviorTree(std::move(Loaded));
 }
 
-void ATargetActor::UpdateDroneState()
+void ATargetPawn::UpdateDroneState()
 {
 	if (bIsCaptured) return;
 
@@ -148,7 +172,7 @@ void ATargetActor::UpdateDroneState()
 	}
 }
 
-bool ATargetActor::ComputeDroneInFOV() const
+bool ATargetPawn::ComputeDroneInFOV() const
 {
 	if (!CachedDrone) return false;
 
@@ -162,4 +186,33 @@ bool ATargetActor::ComputeDroneInFOV() const
 	FVector ToTarget = (GetActorLocation() - CachedDrone->GetActorLocation()).GetSafeNormal();
 
 	return FVector::DotProduct(CamDir, ToTarget) >= 0.707f;
+}
+
+void ATargetPawn::AdvanceAlongPath()
+{
+	if (!PatrolPath || CurrentSpeed <= 0.0f) return;
+
+	USplineComponent* Spline = PatrolPath->GetSpline();
+	float SplineLength = Spline->GetSplineLength();
+	if (SplineLength <= 0.0f) return;
+
+	SplineDistance += CurrentSpeed * LastDeltaTime;
+	SplineDistance = FMath::Fmod(SplineDistance, SplineLength);
+
+	FVector NewLocation = Spline->GetLocationAtDistanceAlongSpline(SplineDistance, ESplineCoordinateSpace::World);
+	FVector Tangent = Spline->GetTangentAtDistanceAlongSpline(SplineDistance, ESplineCoordinateSpace::World).GetSafeNormal();
+
+	FHitResult Hit;
+	FVector TraceStart = NewLocation + FVector(0.0f, 0.0f, 500.0f);
+	FVector TraceEnd   = NewLocation - FVector(0.0f, 0.0f, 2000.0f);
+	if (GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic))
+	{
+		NewLocation.Z = Hit.ImpactPoint.Z + 50.0f;
+	}
+
+	SetActorLocation(NewLocation);
+	if (!Tangent.IsNearlyZero())
+	{
+		SetActorRotation(Tangent.Rotation());
+	}
 }
