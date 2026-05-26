@@ -213,6 +213,18 @@ New files: `SearchDestroyGameMode.h/.cpp`, `SearchDestroyGameState.h/.cpp`
 
 **Done when**: session starts, timer counts down, all three captures trigger win, timeout triggers lose, MonitorServer serves live data at `localhost:8080`.
 
+#### 6d — Road path system & target behaviour refinement
+
+**Goal**: replace manually-drawn splines with road-accurate patrol paths derived from OSM data. Same dataset drives both pawn movement and mini-map road rendering.
+
+- Export Munich 2 km playspace road network from OpenStreetMap (Overpass Turbo bbox query) as GeoJSON → committed to `Content/Roads/munich_roads.json`
+- `APatrolPath` gains a `RoadFeatureId` property (editor-assigned string matching a GeoJSON feature ID); `BeginPlay` loads the file, finds the feature, iterates its lat/lon waypoints, converts each via `ACesiumGeoreference::TransformLongitudeLatitudeHeightToUnreal` at a fixed ellipsoidal altitude, and calls `USplineComponent::SetSplinePoints`. Waypoints are 2D — altitude is ignored because `AdvanceAlongPath` already line-traces to terrain and adds 50 cm.
+- Each `ATargetPawn` keeps the same `PatrolPath` reference; no changes to movement or BT logic.
+- Mini-map road underlay (pre-work for Phase 7c): the same GeoJSON polylines are projected to mini-map UV coordinates using the same lat/lon → normalised-offset formula used for the drone position dot.
+- BT behaviour refinement as needed (e.g. evasion direction, reaction timing) after observing targets in PIE.
+
+**Done when**: all three pawns follow real Munich road geometry without any manual spline editing; roads visible on mini-map.
+
 ---
 
 ### Phase 7 — HUD
