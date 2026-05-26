@@ -19,16 +19,11 @@ public:
 	FDronePID YawRatePID   { 0.001f,  0.0f, 0.0f,     0.2f };
 
 	float AngleGain      = 8.0f;
-	float MaxTiltAngle   = 35.0f;
-	float MaxAngularRate = 180.0f;
+	float MaxTiltAngle   = 45.0f;
+	float MaxAngularRate = 300.0f;
 	float MaxYawRate     = 90.0f;
 	float HoverThrottle  = 0.0f;
 	float ThrottleRange  = 0.4f;
-	float InputExpo      = 2.5f;
-	float SetpointRate   = 200.0f;
-
-	float PitchSetpoint = 0.0f;
-	float RollSetpoint  = 0.0f;
 
 	void Update(const FDroneControlInput& Input,
 	            const FVector& AttitudeDeg,
