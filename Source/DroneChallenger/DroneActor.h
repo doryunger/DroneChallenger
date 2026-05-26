@@ -97,7 +97,7 @@ private:
 	float LinearDamping = 0.5f;
 
 	UPROPERTY(EditAnywhere, Category = "Drone|Physics", meta = (ClampMin = "0.0"))
-	float AngularDamping = 5.0f;
+	float AngularDamping = 2.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Drone|Physics", meta = (ClampMin = "1.0"))
 	float ArmLength = 32.5f;
@@ -111,11 +111,15 @@ private:
 	UPROPERTY(EditAnywhere, Category = "Drone|Rotors", meta = (ClampMin = "0.1"))
 	float MotorSpoolRate = 8.0f;
 
+	UPROPERTY(EditAnywhere, Category = "Drone|Input", meta = (ClampMin = "0.5", ClampMax = "20.0"))
+	float InputRampRate = 4.0f;
+
 	FDroneFlightController FlightController;
 	float RotorThrottle[4]        = { 0.0f, 0.0f, 0.0f, 0.0f };
 	float RotorSpinAngle[4]       = { 0.0f, 0.0f, 0.0f, 0.0f };
 	float RotorCurrentSpinRate[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	FDroneControlInput ControlInput;
+	FDroneControlInput SmoothedInput;
 
 	bool bFPVMode = false;
 

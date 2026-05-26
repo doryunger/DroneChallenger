@@ -14,20 +14,18 @@ struct FDroneControlInput
 class FDroneFlightController
 {
 public:
-	FDronePID PitchRatePID { 0.0008f, 0.0f, 0.00002f, 0.2f };
-	FDronePID RollRatePID  { 0.0008f, 0.0f, 0.00002f, 0.2f };
-	FDronePID YawRatePID   { 0.001f,  0.0f, 0.0f,     0.2f };
+	FDronePID PitchRatePID { 0.0003f, 0.0f, 0.0f, 0.5f };
+	FDronePID RollRatePID  { 0.0003f, 0.0f, 0.0f, 0.5f };
+	FDronePID YawRatePID   { 0.0005f, 0.0f, 0.0f, 0.5f };
 
-	float AngleGain      = 8.0f;
-	float MaxTiltAngle   = 45.0f;
-	float MaxAngularRate = 300.0f;
-	float MaxYawRate     = 90.0f;
-	float HoverThrottle  = 0.0f;
-	float ThrottleRange  = 0.4f;
+	float MaxPitchRollRate = 30.0f;
+	float MaxYawRate       = 30.0f;
+	float HoverThrottle    = 0.0f;
+	float ThrottleRange    = 0.5f;
 
 	void Update(const FDroneControlInput& Input,
-	            const FVector& AttitudeDeg,
-	            const FVector& AngularVelocityBodyDeg,
+	            const FVector& ActorUp,
+	            const FVector& BodyAngVelDeg,
 	            float DeltaTime,
 	            float OutThrottle[4]);
 
