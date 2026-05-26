@@ -13,17 +13,11 @@ void FDroneFlightController::Update(
 	const float TiltComp = 1.0f / FMath::Max(FMath::Cos(TiltRad), 0.5f);
 	const float ThrottleCmd = FMath::Clamp((HoverThrottle + Input.Throttle * ThrottleRange) * TiltComp, 0.0f, 1.0f);
 
-	const float ExpoPitch = FMath::Sign(Input.Pitch) * FMath::Pow(FMath::Abs(Input.Pitch), InputExpo);
-	const float ExpoRoll  = FMath::Sign(Input.Roll)  * FMath::Pow(FMath::Abs(Input.Roll),  InputExpo);
+	const float DesiredPitchAngle = Input.Pitch * MaxTiltAngle;
+	const float DesiredRollAngle  = Input.Roll  * MaxTiltAngle;
 
-	const float TargetPitchAngle = ExpoPitch * MaxTiltAngle;
-	const float TargetRollAngle  = ExpoRoll  * MaxTiltAngle;
-
-	PitchSetpoint = FMath::FInterpConstantTo(PitchSetpoint, TargetPitchAngle, DeltaTime, SetpointRate);
-	RollSetpoint  = FMath::FInterpConstantTo(RollSetpoint,  TargetRollAngle,  DeltaTime, SetpointRate);
-
-	const float DesiredPitchRate = FMath::Clamp((PitchSetpoint - AttitudeDeg.Y) * AngleGain, -MaxAngularRate, MaxAngularRate);
-	const float DesiredRollRate  = FMath::Clamp((RollSetpoint  - AttitudeDeg.X) * AngleGain, -MaxAngularRate, MaxAngularRate);
+	const float DesiredPitchRate = FMath::Clamp((DesiredPitchAngle - AttitudeDeg.Y) * AngleGain, -MaxAngularRate, MaxAngularRate);
+	const float DesiredRollRate  = FMath::Clamp((DesiredRollAngle  - AttitudeDeg.X) * AngleGain, -MaxAngularRate, MaxAngularRate);
 
 	const float DesiredYawRate = Input.Yaw * MaxYawRate;
 
@@ -43,6 +37,4 @@ void FDroneFlightController::Reset()
 	PitchRatePID.Reset();
 	RollRatePID.Reset();
 	YawRatePID.Reset();
-	PitchSetpoint = 0.0f;
-	RollSetpoint  = 0.0f;
 }
