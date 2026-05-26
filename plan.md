@@ -55,7 +55,7 @@ A collapsible UMG panel in the corner of the game screen embeds a `WebBrowserWid
 | Flight controller | Cascade angle-mode PID (see `context/flight-controller.md`) |
 | Input | Enhanced Input System |
 | UI | UMG + Slate + WebBrowser plugin |
-| Behavior trees | Arborist (C++20 static lib, submodule at `Source/ThirdParty/Arborist/`) |
+| Behavior trees | Arborist (C++20 static lib, prebuilt External module at `Source/ThirdParty/ArboristLib/`) |
 | Build modules | Core, CoreUObject, Engine, InputCore, EnhancedInput, CesiumRuntime, UMG, Slate, SlateCore, WebBrowser |
 
 ---
@@ -160,12 +160,14 @@ Implemented `ATerrainProbe` — an editor utility actor that calls `ACesium3DTil
 
 Arborist is integrated as a **prebuilt External UBT module** (`Source/ThirdParty/ArboristLib/`).
 
-- `arborist.lib` (33 MB) combines Arborist + yaml-cpp 0.8.0 + sqlite3 amalgamation, built once with cmake + MSVC from the standalone clone at `C:/Users/Shadow/Projects/arborist/`
+- `arborist.lib` (86 MB) combines `bt_framework + ryml + c4core + sqlite3 + brotli` into a single static lib via `lib.exe`
+- Built from `github.com/doryunger/arborist` using **vcpkg overlay port** (`arborist/vcpkg-port/`) with the `x64-windows-static-md` triplet — static `.lib` output compiled with `/MD` to match UE5's CRT
+- yaml-cpp replaced with **ryml** (rapidyaml) to eliminate `__std_find_last_not_ch_pos_1` linker errors caused by yaml-cpp's vectorised STL string intrinsics not being available in UE5's link environment
 - `ArboristLib.Build.cs` registers the lib and public headers as `ModuleType.External`
 - `lib/` and `include/` are gitignored — populated by a setup script (deferred to Phase 9)
+- `TerrainProbe.cpp` fix: `#include "Windows/WindowsHWrapper.h"` + `#undef OPAQUE / TRANSPARENT` inserted before `#include "Cesium3DTileset.h"` to prevent Windows GDI macros from breaking CesiumGltf template instantiation under MSVC's conformant preprocessor (`/Zc:preprocessor`)
 - `WebBrowserWidget` plugin added to uproject; `WebBrowser` module added to `Build.cs`
-- Two bugs found and fixed in the Arborist repo: missing `#include <algorithm>` in `ScenarioRunner.cpp`; `Severity::ERROR` / `Severity::WARNING` enum values renamed to `kError` / `kWarning` to avoid Windows SDK macro collision when `httplib.h` pulls in `windows.h`
-- Smoke test: `ATerrainProbe::BeginPlay` ticks a one-action tree and logs `ArboristLib smoke test: PASS`
+- Smoke test: `ATerrainProbe::BeginPlay` parses a one-action YAML schema, ticks the tree, and logs `ArboristLib smoke test: PASS`
 
 **Done when**: project compiles cleanly with Arborist linked; a minimal tree ticks without crash in PIE.
 
@@ -249,7 +251,7 @@ New files: `SearchDestroyGameMode.h/.cpp`, `SearchDestroyGameState.h/.cpp`
 
 - Main menu level (start, settings, quit)
 - `RealisticDroneV2` cooked into build (gitignored, baked at package time)
-- **Arborist setup script** (`setup.ps1`): clones `github.com/doryunger/arborist`, builds `arborist.lib` with cmake + MSVC, copies lib and public headers into `Source/ThirdParty/ArboristLib/lib/Win64/` and `include/` — must run once before opening the project on a fresh machine
+- **Arborist setup script** (`setup.ps1`): installs vcpkg if absent; runs `vcpkg install arborist-poc:x64-windows-static-md --overlay-ports=<arborist-repo>/vcpkg-port`; combines output static libs with `lib.exe` into `arborist.lib`; copies `bt/` headers — must run once before opening the project on a fresh machine
 - MonitorServer and EditorServer disabled in shipping build (`#if !UE_BUILD_SHIPPING`)
 - Windows 64-bit shipping configuration; Cesium streaming budget tuned for 2 km playspace
 - Frame-rate floor check: stable 60 FPS during active BT ticking + terrain streaming
@@ -284,7 +286,7 @@ DroneChallenger/
 │       └── target.yaml                   ← shared BT schema for all three targets
 └── Source/
     ├── ThirdParty/
-    │   └── Arborist/                     ← git submodule (github.com/doryunger/arborist)
+    │   └── ArboristLib/                  ← External UBT module; lib/ and include/ gitignored, populated by setup.ps1
     └── DroneChallenger/
         ├── DroneActor.h/.cpp             ← APawn: physics, mesh, cameras, input, audio
         ├── DroneFlightController.h/.cpp  ← cascade angle-mode PID
