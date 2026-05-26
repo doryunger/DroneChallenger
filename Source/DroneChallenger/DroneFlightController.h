@@ -24,6 +24,11 @@ public:
 	float MaxYawRate     = 90.0f;
 	float HoverThrottle  = 0.0f;
 	float ThrottleRange  = 0.4f;
+	float InputExpo      = 2.5f;
+	float SetpointRate   = 200.0f;
+
+	float PitchSetpoint = 0.0f;
+	float RollSetpoint  = 0.0f;
 
 	void Update(const FDroneControlInput& Input,
 	            const FVector& AttitudeDeg,
