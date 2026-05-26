@@ -13,8 +13,8 @@ void FDroneFlightController::Update(
 	const float DesiredPitchAngle = Input.Pitch * MaxTiltAngle;
 	const float DesiredRollAngle  = Input.Roll  * MaxTiltAngle;
 
-	const float DesiredPitchRate = (DesiredPitchAngle - AttitudeDeg.Y) * AngleGain;
-	const float DesiredRollRate  = (DesiredRollAngle  - AttitudeDeg.X) * AngleGain;
+	const float DesiredPitchRate = FMath::Clamp((DesiredPitchAngle - AttitudeDeg.Y) * AngleGain, -MaxAngleCorrectionRate, MaxAngleCorrectionRate);
+	const float DesiredRollRate  = FMath::Clamp((DesiredRollAngle  - AttitudeDeg.X) * AngleGain, -MaxAngleCorrectionRate, MaxAngleCorrectionRate);
 
 	const float DesiredYawRate = Input.Yaw * MaxYawRate;
 
