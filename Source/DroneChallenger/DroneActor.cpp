@@ -11,6 +11,8 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "InputActionValue.h"
+#include "UObject/ConstructorHelpers.h"
+#include "Engine/SkeletalMesh.h"
 
 ADroneActor::ADroneActor()
 {
@@ -66,6 +68,50 @@ ADroneActor::ADroneActor()
 	FPVCamera->SetRelativeRotation(FRotator(-15.0f, 0.0f, 0.0f));
 	FPVCamera->FieldOfView = 90.0f;
 	FPVCamera->SetActive(false);
+
+	{
+		static ConstructorHelpers::FObjectFinder<USkeletalMesh> Finder(
+			TEXT("/Game/RealisticDroneV2/RealisticDroneContent/Meshes/SKM_RealisticDrone"));
+		if (Finder.Succeeded())
+			VisualMesh->SetSkinnedAssetAndUpdate(Finder.Object);
+	}
+	{
+		static ConstructorHelpers::FObjectFinder<UStaticMesh> Finder(
+			TEXT("/Game/RealisticDroneV2/RealisticDroneContent/Meshes/SM_RealisticDronePropeller_Left"));
+		if (Finder.Succeeded())
+			PropellerMesh_CCW = Finder.Object;
+	}
+	{
+		static ConstructorHelpers::FObjectFinder<UStaticMesh> Finder(
+			TEXT("/Game/RealisticDroneV2/RealisticDroneContent/Meshes/SM_RealisticDronePropeller_Right"));
+		if (Finder.Succeeded())
+			PropellerMesh_CW = Finder.Object;
+	}
+	{
+		static ConstructorHelpers::FObjectFinder<UInputMappingContext> Finder(TEXT("/Game/IMC_Drone"));
+		if (Finder.Succeeded())
+			InputMappingContext = Finder.Object;
+	}
+	{
+		static ConstructorHelpers::FObjectFinder<UInputAction> Finder(TEXT("/Game/IA_Throttle"));
+		if (Finder.Succeeded())
+			IA_Throttle = Finder.Object;
+	}
+	{
+		static ConstructorHelpers::FObjectFinder<UInputAction> Finder(TEXT("/Game/IA_PithRoll"));
+		if (Finder.Succeeded())
+			IA_PitchRoll = Finder.Object;
+	}
+	{
+		static ConstructorHelpers::FObjectFinder<UInputAction> Finder(TEXT("/Game/IA_Yaw"));
+		if (Finder.Succeeded())
+			IA_Yaw = Finder.Object;
+	}
+	{
+		static ConstructorHelpers::FObjectFinder<UInputAction> Finder(TEXT("/Game/IA_SwitchCamera"));
+		if (Finder.Succeeded())
+			IA_SwitchCamera = Finder.Object;
+	}
 }
 
 void ADroneActor::BeginPlay()
@@ -235,10 +281,12 @@ void ADroneActor::Tick(float DeltaTime)
 	const FVector WorldAngVelDeg = PhysicsBody->GetPhysicsAngularVelocityInDegrees();
 	const FVector BodyAngVelDeg  = GetActorRotation().UnrotateVector(WorldAngVelDeg);
 
-	const FRotator ActorRot  = GetActorRotation();
-	const FVector  AttitudeDeg(ActorRot.Roll, ActorRot.Pitch, ActorRot.Yaw);
+	SmoothedInput.Throttle = FMath::FInterpConstantTo(SmoothedInput.Throttle, ControlInput.Throttle, DeltaTime, InputRampRate);
+	SmoothedInput.Pitch    = FMath::FInterpConstantTo(SmoothedInput.Pitch,    ControlInput.Pitch,    DeltaTime, InputRampRate);
+	SmoothedInput.Roll     = FMath::FInterpConstantTo(SmoothedInput.Roll,     ControlInput.Roll,     DeltaTime, InputRampRate);
+	SmoothedInput.Yaw      = FMath::FInterpConstantTo(SmoothedInput.Yaw,      ControlInput.Yaw,      DeltaTime, InputRampRate);
 
-	FlightController.Update(ControlInput, AttitudeDeg, BodyAngVelDeg, DeltaTime, RotorThrottle);
+	FlightController.Update(SmoothedInput, GetActorUpVector(), BodyAngVelDeg, DeltaTime, RotorThrottle);
 	ApplyRotorForces();
 	UpdateRotorVisuals(DeltaTime);
 	UpdateMotorAudio();

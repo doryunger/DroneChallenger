@@ -10,6 +10,7 @@
 #endif
 #include "CesiumGlobeAnchorComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SplineComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -31,6 +32,12 @@ ATargetPawn::ATargetPawn()
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	SetRootComponent(Mesh);
 	Mesh->SetRelativeScale3D(FVector(3.0f, 3.0f, 3.0f));
+
+	{
+		static ConstructorHelpers::FObjectFinder<UStaticMesh> Finder(TEXT("/Engine/BasicShapes/Sphere"));
+		if (Finder.Succeeded())
+			Mesh->SetStaticMesh(Finder.Object);
+	}
 
 	Beacon = CreateDefaultSubobject<UPointLightComponent>(TEXT("Beacon"));
 	Beacon->SetupAttachment(Mesh);
