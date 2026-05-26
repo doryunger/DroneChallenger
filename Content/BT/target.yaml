@@ -1,0 +1,28 @@
+schema_version: "1.0"
+behaviors:
+  - name: captured
+    when: is_captured
+    tree:
+      type: action
+      name: deactivate_beacon
+
+  - name: in_capture_range
+    when: drone_in_capture_range
+    tree:
+      type: sequence
+      children:
+        - type: action
+          name: pulse_beacon_fast
+        - type: action
+          name: increment_capture_timer
+
+  - name: detected
+    when: drone_in_fov
+    tree:
+      type: action
+      name: pulse_beacon_slow
+
+  - name: idle
+    tree:
+      type: action
+      name: idle
