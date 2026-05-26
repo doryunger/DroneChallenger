@@ -171,18 +171,27 @@ Arborist is integrated as a **prebuilt External UBT module** (`Source/ThirdParty
 
 **Done when**: project compiles cleanly with Arborist linked; a minimal tree ticks without crash in PIE.
 
-#### 6b — `ATargetActor` with Arborist BT
+#### 6b — `ATargetPawn` with Arborist BT ✅
 
-New file: `Source/DroneChallenger/TargetActor.h/.cpp`
+New files: `Source/DroneChallenger/TargetPawn.h/.cpp`, `TargetAIController.h/.cpp`, `PatrolPath.h/.cpp`
 
-- `UCesiumGlobeAnchorComponent` for georeferenced placement
-- `UStaticMeshComponent` visual mesh (assignable in editor)
-- `UPointLightComponent` beacon
-- `TUniquePtr<bt::BehaviorTree>` — owns the per-target tree
-- `bt::RuntimeRegistry` populated in `BeginPlay`: actions (`idle`, `pulse_beacon_slow`, `pulse_beacon_fast`, `deactivate_beacon`, `increment_capture_timer`), conditions (`drone_in_fov`, `drone_in_capture_range`, `is_captured`)
-- Blackboard sources updated from game state each `Tick` before `tree.tick()`
-- YAML schema loaded from `Content/BT/target.yaml` (one shared schema for all three targets)
-- `OnCaptured` multicast delegate fired when BT action `capture_complete` executes
+Targets are moving ground vehicle NPCs (`APawn`), not static actors.
+
+- `ATargetPawn : APawn` — possessed by `ATargetAIController` (`AutoPossessAI = PlacedInWorldOrSpawned`); owns `bt::BehaviorTree*`
+- `APatrolPath` — `AActor` with `USplineComponent` root; placed in the level along Munich road segments; referenced by `ATargetPawn::PatrolPath`
+- Movement: BT sets `CurrentSpeed` (`set_speed_normal` / `set_speed_fast` / `stop`), then `advance_along_path` advances `SplineDistance` along the spline. Ground clamping via synchronous downward line trace against Cesium tile collision geometry.
+- BT behaviors (priority order):
+
+| Behavior | Condition | Actions |
+|---|---|---|
+| `captured` | `is_captured` | stop, deactivate_beacon |
+| `in_capture_range` | `drone_in_capture_range` | stop, pulse_beacon_fast, increment_capture_timer |
+| `evading` | `drone_in_fov` | set_speed_fast, pulse_beacon_fast, advance_along_path |
+| `patrol` | *(always)* | set_speed_normal, pulse_beacon_slow, advance_along_path |
+
+- FOV detection: `PlayerController::GetControlRotation().Vector()` dot product ≥ 0.707 within `DetectionRange` (300 m)
+- `FOnTargetCaptured` multicast delegate fires after 2 s continuous hold in capture radius (30 m)
+- YAML schema: `Content/BT/target.yaml`
 
 Three instances placed in the Munich level at fixed geographic positions:
 
@@ -192,14 +201,14 @@ Three instances placed in the Munich level at fixed geographic positions:
 | T2 | 48.1348 | 11.5764 | Viktualienmarkt area (~300 m S) |
 | T3 | 48.1368 | 11.5944 | Isar east bank (~1.4 km E) |
 
-**Done when**: BT ticks each frame; beacon reacts to drone proximity and camera detection; capture completes after 2 s in range; delegate fires.
+**Done when**: pawns patrol their splines; beacon reacts correctly to drone proximity and detection; vehicle stops and capture completes after 2 s hold; delegate fires.
 
 #### 6c — `ASearchDestroyGameMode` + `ASearchDestroyGameState`
 
 New files: `SearchDestroyGameMode.h/.cpp`, `SearchDestroyGameState.h/.cpp`
 
 - `ASearchDestroyGameState`: `RemainingTime`, `CapturedCount`, `TotalTargets`, `bSessionActive`, `bPlayerWon`
-- `ASearchDestroyGameMode`: gathers all `ATargetActor` at BeginPlay; starts 600 s countdown; owns the `bt::MonitorServer` (port 8080); handles win/lose
+- `ASearchDestroyGameMode`: gathers all `ATargetPawn` at BeginPlay; starts 600 s countdown; owns the `bt::MonitorServer` (port 8080); handles win/lose
 - MonitorServer attached to T1's tree by default; switchable from HUD
 
 **Done when**: session starts, timer counts down, all three captures trigger win, timeout triggers lose, MonitorServer serves live data at `localhost:8080`.
@@ -292,9 +301,11 @@ DroneChallenger/
         ├── DroneFlightController.h/.cpp  ← cascade angle-mode PID
         ├── DroneMotorMixer.h             ← X-frame mixing table
         ├── DronePIDController.h          ← generic PID with derivative-on-measurement
-        ├── TargetActor.h/.cpp            ← BT-driven target (Phase 6b)
+        ├── TargetPawn.h/.cpp             ← APawn: BT-driven moving NPC target (Phase 6b)
+        ├── TargetAIController.h/.cpp     ← minimal AAIController for TargetPawn (Phase 6b)
+        ├── PatrolPath.h/.cpp             ← AActor + USplineComponent road path (Phase 6b)
         ├── SearchDestroyGameMode.h/.cpp  ← session timer, MonitorServer (Phase 6c)
         ├── SearchDestroyGameState.h/.cpp ← replicated session state (Phase 6c)
         ├── TerrainProbe.h/.cpp           ← editor utility: Cesium height sampling
-        └── DroneChallenger.Build.cs      ← module + Arborist source dependencies
+        └── DroneChallenger.Build.cs      ← module + Arborist + AIModule dependencies
 ```
