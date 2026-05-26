@@ -30,6 +30,7 @@ ATargetPawn::ATargetPawn()
 
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	SetRootComponent(Mesh);
+	Mesh->SetRelativeScale3D(FVector(3.0f, 3.0f, 3.0f));
 
 	Beacon = CreateDefaultSubobject<UPointLightComponent>(TEXT("Beacon"));
 	Beacon->SetupAttachment(Mesh);
