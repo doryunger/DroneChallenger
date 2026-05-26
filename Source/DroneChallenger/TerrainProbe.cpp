@@ -1,4 +1,11 @@
 #include "TerrainProbe.h"
+#include "Windows/WindowsHWrapper.h"
+#ifdef OPAQUE
+#undef OPAQUE
+#endif
+#ifdef TRANSPARENT
+#undef TRANSPARENT
+#endif
 #include "Cesium3DTileset.h"
 
 THIRD_PARTY_INCLUDES_START
@@ -16,8 +23,12 @@ void ATerrainProbe::BeginPlay()
 	Super::BeginPlay();
 
 	static const std::string SmokeYaml = R"(
-sequence:
-  - action: ping
+schema_version: "1.0"
+behaviors:
+  - name: ping_test
+    tree:
+      type: action
+      name: ping
 )";
 
 	bt::LoaderRegistry Reg;
