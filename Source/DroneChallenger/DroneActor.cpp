@@ -284,7 +284,7 @@ void ADroneActor::Tick(float DeltaTime)
 	SmoothedInput.Throttle = FMath::FInterpConstantTo(SmoothedInput.Throttle, ControlInput.Throttle, DeltaTime, InputRampRate);
 	SmoothedInput.Pitch    = FMath::FInterpConstantTo(SmoothedInput.Pitch,    ControlInput.Pitch,    DeltaTime, InputRampRate);
 	SmoothedInput.Roll     = FMath::FInterpConstantTo(SmoothedInput.Roll,     ControlInput.Roll,     DeltaTime, InputRampRate);
-	SmoothedInput.Yaw      = FMath::FInterpConstantTo(SmoothedInput.Yaw,      ControlInput.Yaw,      DeltaTime, InputRampRate);
+	SmoothedInput.Yaw      = ControlInput.Yaw;
 
 	FlightController.Update(SmoothedInput, GetActorUpVector(), BodyAngVelDeg, DeltaTime, RotorThrottle);
 	ApplyRotorForces();

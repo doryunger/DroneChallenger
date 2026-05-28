@@ -16,10 +16,10 @@ class FDroneFlightController
 public:
 	FDronePID PitchRatePID { 0.0003f, 0.0f, 0.0f, 0.5f };
 	FDronePID RollRatePID  { 0.0003f, 0.0f, 0.0f, 0.5f };
-	FDronePID YawRatePID   { 0.0005f, 0.0f, 0.0f, 0.5f };
+	FDronePID YawRatePID   { 0.002f, 0.0f, 0.0f, 0.5f };
 
 	float MaxPitchRollRate = 30.0f;
-	float MaxYawRate       = 30.0f;
+	float MaxYawRate       = 120.0f;
 	float HoverThrottle    = 0.0f;
 	float ThrottleRange    = 0.5f;
 

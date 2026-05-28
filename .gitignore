@@ -56,6 +56,11 @@ Content/RealisticDroneV2/
 Content/__ExternalActors__/RealisticDroneV2/
 Content/__ExternalObjects__/RealisticDroneV2/
 
+# PS1_Style_Hatchback_Car — marketplace asset pack; not version-controlled
+Content/PS1_Style_Hatchback_Car/
+Content/__ExternalActors__/PS1_Style_Hatchback_Car/
+Content/__ExternalObjects__/PS1_Style_Hatchback_Car/
+
 # ArboristLib — prebuilt outputs populated by setup script at Phase 9; not version-controlled
 Source/ThirdParty/ArboristLib/lib/
 Source/ThirdParty/ArboristLib/include/

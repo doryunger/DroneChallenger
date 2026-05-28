@@ -1,0 +1,146 @@
+#include "DroneGraph.h"
+#include "CesiumGeoreference.h"
+#include "Misc/FileHelper.h"
+#include "Engine/World.h"
+
+bool FDroneGraph::Load(const FString& NodesPath, const FString& EdgesPath,
+                       ACesiumGeoreference* Georef, UWorld* World)
+{
+	if (!Georef || !World) return false;
+
+	FString NodesText;
+	if (!FFileHelper::LoadFileToString(NodesText, *NodesPath))
+	{
+		UE_LOG(LogTemp, Error, TEXT("FDroneGraph: failed to read %s"), *NodesPath);
+		return false;
+	}
+
+	TMap<int32, FVector2D> RawNodes;
+	{
+		TArray<FString> Lines;
+		NodesText.ParseIntoArrayLines(Lines);
+		if (Lines.Num() < 2)
+		{
+			UE_LOG(LogTemp, Error, TEXT("FDroneGraph: nodes file has no data rows"));
+			return false;
+		}
+		const TCHAR* Delim = Lines[0].Contains(TEXT("\t")) ? TEXT("\t") : TEXT(",");
+		UE_LOG(LogTemp, Log, TEXT("FDroneGraph: nodes delimiter=%s, lines=%d"), Delim, Lines.Num());
+		for (int32 i = 1; i < Lines.Num(); ++i)
+		{
+			TArray<FString> Parts;
+			Lines[i].ParseIntoArray(Parts, Delim);
+			if (Parts.Num() < 3) continue;
+			const int32  Id  = FCString::Atoi(*Parts[0].TrimStartAndEnd());
+			const double Lon = FCString::Atod(*Parts[1].TrimStartAndEnd());
+			const double Lat = FCString::Atod(*Parts[2].TrimStartAndEnd());
+			RawNodes.Add(Id, FVector2D(Lon, Lat));
+		}
+	}
+
+	for (auto& Pair : RawNodes)
+	{
+		FVector WorldPos = Georef->TransformLongitudeLatitudeHeightPositionToUnreal(
+			FVector(static_cast<float>(Pair.Value.X), static_cast<float>(Pair.Value.Y), 1000.0f));
+
+		FHitResult Hit;
+		const FVector TraceStart(WorldPos.X, WorldPos.Y, 10000000.0f);
+		const FVector TraceEnd  (WorldPos.X, WorldPos.Y, -1000000.0f);
+		if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic))
+			WorldPos.Z = Hit.ImpactPoint.Z + 50.0f;
+
+		NodeWorldPos.Add(Pair.Key, WorldPos);
+		NodeIds.Add(Pair.Key);
+	}
+
+	FString EdgesText;
+	if (!FFileHelper::LoadFileToString(EdgesText, *EdgesPath))
+	{
+		UE_LOG(LogTemp, Error, TEXT("FDroneGraph: failed to read %s"), *EdgesPath);
+		return false;
+	}
+
+	{
+		TArray<FString> Lines;
+		EdgesText.ParseIntoArrayLines(Lines);
+		const TCHAR* Delim = Lines.Num() > 0 && Lines[0].Contains(TEXT("\t")) ? TEXT("\t") : TEXT(",");
+		UE_LOG(LogTemp, Log, TEXT("FDroneGraph: edges delimiter=%s, lines=%d"), Delim, Lines.Num());
+		for (int32 i = 1; i < Lines.Num(); ++i)
+		{
+			TArray<FString> Parts;
+			Lines[i].ParseIntoArray(Parts, Delim);
+			if (Parts.Num() < 2) continue;
+			const int32 From = FCString::Atoi(*Parts[0].TrimStartAndEnd());
+			const int32 To   = FCString::Atoi(*Parts[1].TrimStartAndEnd());
+			if (!NodeWorldPos.Contains(From) || !NodeWorldPos.Contains(To)) continue;
+			Adjacency.FindOrAdd(From).AddUnique(To);
+			Adjacency.FindOrAdd(To).AddUnique(From);
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("FDroneGraph: loaded %d nodes, %d connected nodes, %d adjacency entries"),
+		NodeIds.Num(), Adjacency.Num(), [&]{ int32 t=0; for (auto& p : Adjacency) t+=p.Value.Num(); return t; }());
+
+	return !NodeIds.IsEmpty();
+}
+
+TArray<int32> FDroneGraph::GeneratePath(int32 StartNode, float TargetDistanceCm, int32 PrevNode) const
+{
+	TArray<int32> Path;
+	if (!NodeWorldPos.Contains(StartNode)) return Path;
+
+	Path.Add(StartNode);
+	int32 Current     = StartNode;
+	int32 Prev        = PrevNode;
+	float Accumulated = 0.0f;
+
+	while (Accumulated < TargetDistanceCm)
+	{
+		const int32 Next = PickNextNode(Current, Prev);
+		if (Next == INDEX_NONE) break;
+
+		Accumulated += FVector::Dist(NodeWorldPos[Current], NodeWorldPos[Next]);
+		Path.Add(Next);
+		Prev    = Current;
+		Current = Next;
+	}
+
+	return Path;
+}
+
+int32 FDroneGraph::PickNextNode(int32 From, int32 CameFrom) const
+{
+	const TArray<int32>* Neighbours = Adjacency.Find(From);
+	if (!Neighbours || Neighbours->IsEmpty()) return INDEX_NONE;
+
+	TArray<int32> Candidates;
+	for (int32 N : *Neighbours)
+		if (N != CameFrom) Candidates.Add(N);
+
+	if (Candidates.IsEmpty())
+		return (CameFrom != INDEX_NONE) ? CameFrom : (*Neighbours)[0];
+
+	return Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
+}
+
+int32 FDroneGraph::FindNearestNode(const FVector& WorldPos) const
+{
+	int32 NearestId = INDEX_NONE;
+	float MinDistSq = FLT_MAX;
+	for (int32 Id : NodeIds)
+	{
+		const FVector& NodePos = NodeWorldPos[Id];
+		const float DistSq = FMath::Square(NodePos.X - WorldPos.X) + FMath::Square(NodePos.Y - WorldPos.Y);
+		if (DistSq < MinDistSq)
+		{
+			MinDistSq = DistSq;
+			NearestId = Id;
+		}
+	}
+	return NearestId;
+}
+
+bool FDroneGraph::IsEmpty() const
+{
+	return NodeIds.IsEmpty();
+}
