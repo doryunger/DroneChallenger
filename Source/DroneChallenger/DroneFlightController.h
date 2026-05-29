@@ -26,6 +26,7 @@ public:
 	void Update(const FDroneControlInput& Input,
 	            const FVector& ActorUp,
 	            const FVector& BodyAngVelDeg,
+	            float WorldYawRateDeg,
 	            float DeltaTime,
 	            float OutThrottle[4]);
 

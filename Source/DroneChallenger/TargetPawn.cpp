@@ -13,6 +13,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Components/PointLightComponent.h"
+#include "Components/SpotLightComponent.h"
+#include "Materials/Material.h"
 #include "Components/SplineComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
@@ -67,6 +69,31 @@ ATargetPawn::ATargetPawn()
 	Beacon->SetIntensity(0.0f);
 	Beacon->SetVisibility(false);
 
+	BeaconPole = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BeaconPole"));
+	BeaconPole->SetupAttachment(Mesh);
+	BeaconPole->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	BeaconPole->SetAbsolute(false, false, true);
+	BeaconPole->SetWorldScale3D(FVector(0.5f, 0.5f, 100.0f));
+	BeaconPole->SetVisibility(false);
+	{
+		static ConstructorHelpers::FObjectFinder<UStaticMesh> CylFinder(TEXT("/Engine/BasicShapes/Cylinder"));
+		if (CylFinder.Succeeded()) BeaconPole->SetStaticMesh(CylFinder.Object);
+	}
+	{
+		static ConstructorHelpers::FObjectFinder<UMaterial> MatFinder(TEXT("/Game/M_BeaconGlow"));
+		if (MatFinder.Succeeded()) BeaconPole->SetMaterial(0, MatFinder.Object);
+	}
+
+	BeaconBeamLight = CreateDefaultSubobject<USpotLightComponent>(TEXT("BeaconBeamLight"));
+	BeaconBeamLight->SetupAttachment(Mesh);
+	BeaconBeamLight->SetRelativeRotation(FRotator(90.0f, 0.0f, 0.0f));
+	BeaconBeamLight->SetIntensity(1e8f);
+	BeaconBeamLight->SetAttenuationRadius(200000.0f);
+	BeaconBeamLight->SetInnerConeAngle(1.0f);
+	BeaconBeamLight->SetOuterConeAngle(4.0f);
+	BeaconBeamLight->SetLightColor(FLinearColor(1.0f, 0.0f, 0.0f));
+	BeaconBeamLight->SetVisibility(false);
+
 	GlobeAnchor = CreateDefaultSubobject<UCesiumGlobeAnchorComponent>(TEXT("GlobeAnchor"));
 
 	AIControllerClass = ATargetAIController::StaticClass();
@@ -86,23 +113,21 @@ void ATargetPawn::BeginPlay()
 	CachedDrone = Cast<ADroneActor>(UGameplayStatics::GetActorOfClass(GetWorld(), ADroneActor::StaticClass()));
 	CachedGeoreference = ACesiumGeoreference::GetDefaultGeoreference(this);
 
-	Mesh->SetRelativeScale3D(FVector(3.0f, 3.0f, 3.0f));
+	Mesh->SetRelativeScale3D(FVector(1.5f, 1.5f, 1.5f));
 
-	// The drone's editor-placed position is our tile-loading anchor.
-	// Terrain at this XY is guaranteed to be loaded because the camera starts here.
-	// All node searches radiate outward from this point.
-	if (IsValid(CachedDrone))
-	{
-		const FVector DronePosEditor = CachedDrone->GetActorLocation();
-		DroneEditorXY = FVector2D(DronePosEditor.X, DronePosEditor.Y);
-		DroneEditorZ  = DronePosEditor.Z;
-	}
-	else
-	{
-		const FVector CarPosEditor = GetActorLocation();
-		DroneEditorXY = FVector2D(CarPosEditor.X, CarPosEditor.Y);
-		DroneEditorZ  = CarPosEditor.Z;
-	}
+	// Position beacon pole so it spans 0–100 m above the car.
+	// bAbsoluteScale is true so pole scale ignores parent, but position is still
+	// in parent-local space — divide by mesh scale to get the right world offset.
+	static constexpr float RuntimeMeshScale = 1.5f;
+	static constexpr float BeaconCenterM    = 50.0f;   // midpoint of 100 m pole
+	BeaconPole->SetRelativeLocation(FVector(0.0f, 0.0f, BeaconCenterM * 100.0f / RuntimeMeshScale));
+
+	// Record the drone's editor-placed position. Tiles are guaranteed loaded here because
+	// the camera starts at this location. The drone stays here while placement runs —
+	// no aerial waiting state for the player.
+	DroneEditorPos = IsValid(CachedDrone)
+		? CachedDrone->GetActorLocation()
+		: GetActorLocation();
 
 	{
 		ACesiumGeoreference* Georef = CachedGeoreference;
@@ -111,7 +136,7 @@ void ATargetPawn::BeginPlay()
 
 		if (Georef && Graph.Load(NodesPath, EdgesPath, Georef, GetWorld()) && !Graph.NodeIds.IsEmpty())
 		{
-			UE_LOG(LogTemp, Log, TEXT("TargetPawn: graph loaded %d nodes — searching for placement within %.0f cm of drone editor pos"),
+			UE_LOG(LogTemp, Log, TEXT("TargetPawn: graph loaded %d nodes — starting placement search (radius %.0f cm)"),
 				Graph.NodeIds.Num(), PlacementRadius);
 
 			GetWorldTimerManager().SetTimer(
@@ -325,19 +350,35 @@ void ATargetPawn::UpdateDroneState()
 
 	bDroneInFOV = ComputeDroneInFOV();
 
-	if (CachedDrone)
+	if (IsValid(CachedDrone))
 	{
-		float Dist = FVector::Distance(GetActorLocation(), CachedDrone->GetActorLocation());
+		const float Dist = FVector::Distance(GetActorLocation(), CachedDrone->GetActorLocation());
 		bDroneInCaptureRange = (Dist <= CaptureRadius);
+
+		FHitResult LOSHit;
+		FCollisionQueryParams LOSParams(NAME_None, false, this);
+		LOSParams.AddIgnoredActor(CachedDrone);
+		const bool bBlocked = GetWorld()->LineTraceSingleByChannel(
+			LOSHit,
+			GetActorLocation() + FVector(0.0f, 0.0f, 200.0f),
+			CachedDrone->GetActorLocation(),
+			ECC_Visibility, LOSParams);
+		bDroneHasLOS = !bBlocked;
 	}
 	else
 	{
 		bDroneInCaptureRange = false;
+		bDroneHasLOS         = false;
 	}
 
 	if (!bDroneInCaptureRange)
-	{
 		CaptureTimer = 0.0f;
+
+	const bool bShowBeacon = !bDroneHasLOS;
+	if (BeaconPole->IsVisible() != bShowBeacon)
+	{
+		BeaconPole->SetVisibility(bShowBeacon);
+		BeaconBeamLight->SetVisibility(bShowBeacon);
 	}
 }
 
@@ -407,54 +448,52 @@ void ATargetPawn::TryInitialPlacement()
 	UWorld* World = GetWorld();
 	if (!World) return;
 
-	// Collect graph nodes within the current search radius of the drone's editor position.
-	// Sorted nearest-first so we land as close to the drone as possible.
+	// Collect candidates within the current search radius, shuffled for variety.
+	// The drone stays at its editor position throughout — no aerial waiting view.
+	// Tiles are loaded here, so traces succeed immediately for nearby nodes.
 	TArray<TPair<float, int32>> Candidates;
 	for (int32 NodeId : Graph.NodeIds)
 	{
 		const FVector* P = Graph.NodeWorldPos.Find(NodeId);
 		if (!P) continue;
-		const float Dist2D = FVector2D::Distance(DroneEditorXY, FVector2D(P->X, P->Y));
+		const float Dist2D = FVector2D::Distance(
+			FVector2D(DroneEditorPos.X, DroneEditorPos.Y),
+			FVector2D(P->X, P->Y));
 		if (Dist2D <= PlacementRadius)
 			Candidates.Add({ Dist2D, NodeId });
 	}
+
 	for (int32 i = Candidates.Num() - 1; i > 0; --i)
-	{
-		const int32 j = FMath::RandRange(0, i);
-		Candidates.Swap(i, j);
-	}
+		Candidates.Swap(i, FMath::RandRange(0, i));
 
 	if (Candidates.IsEmpty())
 	{
-		PlacementRadius += 5000.0f;
-		UE_LOG(LogTemp, Warning,
-			TEXT("TargetPawn: no graph nodes within %.0f cm of drone — expanding to %.0f cm"),
-			PlacementRadius - 5000.0f, PlacementRadius);
+		PlacementRadius += 10000.0f;
+		UE_LOG(LogTemp, Warning, TEXT("TargetPawn: no nodes within radius — expanding to %.0f cm"), PlacementRadius);
 		return;
 	}
 
-	// Try the closest nodes until one gives a valid terrain hit.
-	static constexpr int32 MaxTriesPerAttempt = 15;
-	static constexpr float TraceHalfHeight    = 3000.0f;   // ±30m around drone editor Z
-
 	FCollisionQueryParams Params;
 	Params.AddIgnoredActor(this);
+	if (IsValid(CachedDrone)) Params.AddIgnoredActor(CachedDrone);
 
-	const int32 NumToTry = FMath::Min(MaxTriesPerAttempt, Candidates.Num());
+	static constexpr int32 MaxTries    = 20;
+	static constexpr float TraceHalf   = 5000.0f;
+
+	const int32 NumToTry = FMath::Min(MaxTries, Candidates.Num());
 	for (int32 i = 0; i < NumToTry; ++i)
 	{
-		const int32 NodeId = Candidates[i].Value;
+		const int32   NodeId  = Candidates[i].Value;
 		const FVector* NodePos = Graph.NodeWorldPos.Find(NodeId);
 		if (!NodePos) continue;
 
 		FHitResult Hit;
 		if (!World->LineTraceSingleByChannel(Hit,
-			FVector(NodePos->X, NodePos->Y, DroneEditorZ + TraceHalfHeight),
-			FVector(NodePos->X, NodePos->Y, DroneEditorZ - TraceHalfHeight),
+			FVector(NodePos->X, NodePos->Y, DroneEditorPos.Z + TraceHalf),
+			FVector(NodePos->X, NodePos->Y, DroneEditorPos.Z - TraceHalf),
 			ECC_WorldStatic, Params))
 			continue;
 
-		// Valid terrain hit — commit placement.
 		const FVector CarPos(NodePos->X, NodePos->Y, Hit.ImpactPoint.Z + 50.0f);
 		SetActorLocation(CarPos);
 
@@ -470,7 +509,12 @@ void ATargetPawn::TryInitialPlacement()
 
 		PlaceDroneNearCar(CarPos, CarForward);
 
+		AltitudeHistory.Empty();
+		AltitudeHistory.Add(CarPos.Z);
+
 		World->GetTimerManager().ClearTimer(PlacementTimer);
+		World->GetTimerManager().SetTimer(
+			TerrainSnapTimer, this, &ATargetPawn::PeriodicTerrainSnap, 60.0f, true);
 		bPlacementDone = true;
 
 		UE_LOG(LogTemp, Log,
@@ -479,12 +523,76 @@ void ATargetPawn::TryInitialPlacement()
 		return;
 	}
 
-	// All candidates missed — tiles may not be loaded yet for those nodes.
-	// Widen slightly so the next attempt also covers more area.
-	PlacementRadius += 1000.0f;
+	PlacementRadius += 5000.0f;
 	UE_LOG(LogTemp, Log,
-		TEXT("TargetPawn: all %d candidates missed terrain trace — tiles still loading (radius now %.0f cm)"),
+		TEXT("TargetPawn: %d candidates all missed — tiles still loading, radius now %.0f cm"),
 		NumToTry, PlacementRadius);
+}
+
+bool ATargetPawn::ShouldAcceptAltitude(float CandidateZ)
+{
+	if (AltitudeHistory.IsEmpty())
+	{
+		AltitudeHistory.Add(CandidateZ);
+		return true;
+	}
+
+	const float BaselineZ = AltitudeHistory.Last();
+	const float Delta     = CandidateZ - BaselineZ;
+
+	if (FMath::Abs(Delta) <= AltSpikeThreshold)
+	{
+		AltitudeHistory.Add(CandidateZ);
+		if (AltitudeHistory.Num() > AltHistorySize)
+			AltitudeHistory.RemoveAt(0);
+		return true;
+	}
+
+	// Sharp change — check if the whole recent history agrees with this trend.
+	// If history is short, defer: store the candidate but don't move yet.
+	if (AltitudeHistory.Num() < AltHistorySize)
+	{
+		AltitudeHistory.Add(CandidateZ);
+		return false;
+	}
+
+	// Sustained trend: every sample in history moved in the same direction.
+	const bool bAllUp   = AltitudeHistory.Last() > AltitudeHistory[0] + AltSpikeThreshold;
+	const bool bAllDown = AltitudeHistory.Last() < AltitudeHistory[0] - AltSpikeThreshold;
+
+	if (bAllUp || bAllDown)
+	{
+		AltitudeHistory.Empty();
+		AltitudeHistory.Add(CandidateZ);
+		return true;
+	}
+
+	// Isolated spike — reject, keep history stable.
+	return false;
+}
+
+void ATargetPawn::PeriodicTerrainSnap()
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	const FVector CarPos = GetActorLocation();
+
+	FHitResult Hit;
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(this);
+
+	if (!World->LineTraceSingleByChannel(Hit,
+		FVector(CarPos.X, CarPos.Y, CarPos.Z + 2000.0f),
+		FVector(CarPos.X, CarPos.Y, CarPos.Z - 5000.0f),
+		ECC_WorldStatic, Params))
+		return;
+
+	if (Hit.ImpactPoint.Z >= CarPos.Z + 500.0f)
+		return;
+
+	if (ShouldAcceptAltitude(Hit.ImpactPoint.Z + 50.0f))
+		SetActorLocation(FVector(CarPos.X, CarPos.Y, Hit.ImpactPoint.Z + 50.0f));
 }
 
 void ATargetPawn::AdvanceAlongPath()
@@ -545,13 +653,15 @@ void ATargetPawn::AdvanceAlongGraph()
 		Params.AddIgnoredActor(this);
 		const FVector WP = *WaypointPtr;
 		if (GetWorld()->LineTraceSingleByChannel(Hit,
-			FVector(WP.X, WP.Y, WP.Z + 200000.0f),
-			FVector(WP.X, WP.Y, WP.Z - 200000.0f),
+			FVector(WP.X, WP.Y, CurrentPos.Z + 2000.0f),
+			FVector(WP.X, WP.Y, CurrentPos.Z - 5000.0f),
 			ECC_WorldStatic, Params))
 		{
+			const float NewZ = Hit.ImpactPoint.Z + 50.0f;
 			if (FVector* NodePos = Graph.NodeWorldPos.Find(CurrentPath[WaypointIndex]))
-				NodePos->Z = Hit.ImpactPoint.Z + 50.0f;
-			SetActorLocation(FVector(CurrentPos.X, CurrentPos.Y, Hit.ImpactPoint.Z + 50.0f));
+				NodePos->Z = NewZ;
+			if (ShouldAcceptAltitude(NewZ))
+				SetActorLocation(FVector(CurrentPos.X, CurrentPos.Y, NewZ));
 		}
 
 		PathNodeIndex = WaypointIndex;

@@ -8,6 +8,7 @@
 class UCesiumGlobeAnchorComponent;
 class UStaticMeshComponent;
 class UPointLightComponent;
+class USpotLightComponent;
 class ADroneActor;
 class APatrolPath;
 class ACesiumGeoreference;
@@ -68,6 +69,12 @@ private:
 	TObjectPtr<UPointLightComponent> Beacon;
 
 	UPROPERTY(VisibleAnywhere, Category = "Components")
+	TObjectPtr<UStaticMeshComponent> BeaconPole;
+
+	UPROPERTY(VisibleAnywhere, Category = "Components")
+	TObjectPtr<USpotLightComponent> BeaconBeamLight;
+
+	UPROPERTY(VisibleAnywhere, Category = "Components")
 	TObjectPtr<UCesiumGlobeAnchorComponent> GlobeAnchor;
 
 	bt::BehaviorTree* Tree = nullptr;
@@ -85,6 +92,7 @@ private:
 	bool bIsCaptured = false;
 	bool bDroneInFOV = false;
 	bool bDroneInCaptureRange = false;
+	bool bDroneHasLOS = false;
 	bool bOnEvadePath = false;
 	float CaptureTimer = 0.0f;
 	float LastDeltaTime = 0.0f;
@@ -99,13 +107,16 @@ private:
 	void AdvanceAlongGraph();
 	void PlaceDroneNearCar(const FVector& CarPos, const FVector& CarForward);
 	void TryInitialPlacement();
+	void PeriodicTerrainSnap();
+	bool ShouldAcceptAltitude(float CandidateZ);
 
-	// Drone's editor-snapped position — this is where tiles are loaded.
-	// All placement searches radiate outward from here.
-	FVector2D    DroneEditorXY;
-	float        DroneEditorZ      = 0.0f;
+	FVector      DroneEditorPos;
+	float        PlacementRadius    = 20000.0f;
+	bool         bPlacementDone     = false;
 
-	bool         bPlacementDone    = false;
-	float        PlacementRadius   = 5000.0f;   // UE cm, grows each failed attempt
+	TArray<float> AltitudeHistory;
+	static constexpr int32 AltHistorySize    = 5;
+	static constexpr float AltSpikeThreshold = 500.0f;  // 5 m spike tolerance
 	FTimerHandle PlacementTimer;
+	FTimerHandle TerrainSnapTimer;
 };
