@@ -5,6 +5,7 @@ void FDroneFlightController::Update(
 	const FDroneControlInput& Input,
 	const FVector& ActorUp,
 	const FVector& BodyAngVelDeg,
+	float WorldYawRateDeg,
 	float DeltaTime,
 	float OutThrottle[4])
 {
@@ -18,7 +19,7 @@ void FDroneFlightController::Update(
 
 	const float PitchOut = PitchRatePID.Update(DesiredPitchRate - BodyAngVelDeg.Y, BodyAngVelDeg.Y, DeltaTime);
 	const float RollOut  = RollRatePID .Update(DesiredRollRate  - BodyAngVelDeg.X, BodyAngVelDeg.X, DeltaTime);
-	const float YawOut   = YawRatePID  .Update(DesiredYawRate   - BodyAngVelDeg.Z, BodyAngVelDeg.Z, DeltaTime);
+	const float YawOut   = YawRatePID  .Update(DesiredYawRate   - WorldYawRateDeg, WorldYawRateDeg, DeltaTime);
 
 	FDroneMotorMixer::Mix(ThrottleCmd, PitchOut, RollOut, YawOut, OutThrottle);
 }
