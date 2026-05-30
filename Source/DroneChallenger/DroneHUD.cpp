@@ -3,6 +3,7 @@
 #include "DroneTrackingWidget.h"
 #include "DroneMiniMapWidget.h"
 #include "DroneAttitudeWidget.h"
+#include "DroneCrosshairWidget.h"
 #include "DroneActor.h"
 #include "TargetPawn.h"
 #include "Kismet/GameplayStatics.h"
@@ -36,5 +37,11 @@ void ADroneHUD::BeginPlay()
     {
         AttitudeWidget = CreateWidget<UDroneAttitudeWidget>(GetWorld(), AttitudeWidgetClass);
         if (AttitudeWidget) { AttitudeWidget->Init(Drone); AttitudeWidget->AddToViewport(); }
+    }
+
+    if (CrosshairWidgetClass)
+    {
+        CrosshairWidget = CreateWidget<UDroneCrosshairWidget>(GetWorld(), CrosshairWidgetClass);
+        if (CrosshairWidget) { CrosshairWidget->Init(Drone); CrosshairWidget->AddToViewport(); }
     }
 }
