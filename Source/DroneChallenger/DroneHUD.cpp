@@ -2,7 +2,7 @@
 #include "BTDisplayWidget.h"
 #include "DroneTrackingWidget.h"
 #include "DroneMiniMapWidget.h"
-#include "DroneAttitudeWidget.h"
+#include "DronePFDWidget.h"
 #include "DroneCrosshairWidget.h"
 #include "DroneActor.h"
 #include "TargetPawn.h"
@@ -33,10 +33,10 @@ void ADroneHUD::BeginPlay()
         if (MiniMapWidget) { MiniMapWidget->Init(Drone, Target); MiniMapWidget->AddToViewport(); }
     }
 
-    if (AttitudeWidgetClass)
+    if (PFDWidgetClass)
     {
-        AttitudeWidget = CreateWidget<UDroneAttitudeWidget>(GetWorld(), AttitudeWidgetClass);
-        if (AttitudeWidget) { AttitudeWidget->Init(Drone); AttitudeWidget->AddToViewport(); }
+        PFDWidget = CreateWidget<UDronePFDWidget>(GetWorld(), PFDWidgetClass);
+        if (PFDWidget) { PFDWidget->Init(Drone); PFDWidget->AddToViewport(); }
     }
 
     if (CrosshairWidgetClass)
