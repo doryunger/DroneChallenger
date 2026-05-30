@@ -183,6 +183,13 @@ void ATargetPawn::Tick(float DeltaTime)
 
 	LastDeltaTime = DeltaTime;
 	UpdateDroneState();
+	if (bDroneInFOV) {
+		CurrentTrackingTime += DeltaTime;
+		BestTrackingTime = FMath::Max(BestTrackingTime, CurrentTrackingTime);
+	} else if (bWasInFOV) {
+		CurrentTrackingTime = 0.0f;
+	}
+	bWasInFOV = bDroneInFOV;
 	Tree->tick();
 }
 
