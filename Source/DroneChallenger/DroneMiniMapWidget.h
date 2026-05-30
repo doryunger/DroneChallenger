@@ -40,5 +40,4 @@ private:
     FVector  CachedTargetPos   = FVector::ZeroVector;
     bool     bCachedTargetInFOV = false;
 
-    FVector2D WorldToMap(const FVector2D& Center, float Scale, const FVector& WorldPos) const;
 };
