@@ -29,12 +29,6 @@ void UDroneMiniMapWidget::Init(ADroneActor* InDrone, ATargetPawn* InTarget)
     Target = InTarget;
 }
 
-void UDroneMiniMapWidget::NativeConstruct()
-{
-    Super::NativeConstruct();
-    bCanEverTick = true;
-}
-
 void UDroneMiniMapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
@@ -104,7 +98,9 @@ int32 UDroneMiniMapWidget::NativePaint(
         const FVector2D TextPos = Center + Dir * (Radius + 6.f) - FVector2D(6.f, 6.f);
         const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Regular", 9);
         FSlateDrawElement::MakeText(OutDrawElements, LayerId,
-            AllottedGeometry.ToPaintGeometry(TextPos, FVector2D(14.f, 14.f)),
+            AllottedGeometry.ToPaintGeometry(
+                FVector2f(14.f, 14.f),
+                FSlateLayoutTransform(FVector2f((float)TextPos.X, (float)TextPos.Y))),
             FText::FromString(Label), Font, ESlateDrawEffect::None, kCompassColor);
     }
 

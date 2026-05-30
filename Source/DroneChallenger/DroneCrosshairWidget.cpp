@@ -13,12 +13,6 @@ void UDroneCrosshairWidget::Init(ADroneActor* InDrone)
 	Drone = InDrone;
 }
 
-void UDroneCrosshairWidget::NativeConstruct()
-{
-	Super::NativeConstruct();
-	bCanEverTick = true;
-}
-
 void UDroneCrosshairWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
