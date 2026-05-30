@@ -6,7 +6,7 @@
 class UBTDisplayWidget;
 class UDroneTrackingWidget;
 class UDroneMiniMapWidget;
-class UDroneAttitudeWidget;
+class UDronePFDWidget;
 class UDroneCrosshairWidget;
 class ADroneActor;
 class ATargetPawn;
@@ -26,7 +26,7 @@ public:
     TSubclassOf<UDroneMiniMapWidget> MiniMapWidgetClass;
 
     UPROPERTY(EditDefaultsOnly, Category = "HUD")
-    TSubclassOf<UDroneAttitudeWidget> AttitudeWidgetClass;
+    TSubclassOf<UDronePFDWidget> PFDWidgetClass;
 
     UPROPERTY(EditDefaultsOnly, Category = "HUD")
     TSubclassOf<UDroneCrosshairWidget> CrosshairWidgetClass;
@@ -38,6 +38,6 @@ private:
     UPROPERTY() TObjectPtr<UBTDisplayWidget>       BTDisplay;
     UPROPERTY() TObjectPtr<UDroneTrackingWidget>   TrackingWidget;
     UPROPERTY() TObjectPtr<UDroneMiniMapWidget>    MiniMapWidget;
-    UPROPERTY() TObjectPtr<UDroneAttitudeWidget>   AttitudeWidget;
+    UPROPERTY() TObjectPtr<UDronePFDWidget>          PFDWidget;
     UPROPERTY() TObjectPtr<UDroneCrosshairWidget>  CrosshairWidget;
 };
