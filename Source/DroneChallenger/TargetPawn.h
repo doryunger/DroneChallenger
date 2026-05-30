@@ -13,7 +13,7 @@ class ADroneActor;
 class APatrolPath;
 class ACesiumGeoreference;
 
-namespace bt { class BehaviorTree; }
+namespace bt { class BehaviorTree; class DecisionEmitter; class MonitorServer; }
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnTargetCaptured, ATargetPawn*);
 
@@ -42,12 +42,14 @@ public:
 	float DetectionRange = 30000.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Target|Detection")
-	float CaptureRadius = 3000.0f;
+	float CaptureRadius = 100.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Target|Detection")
 	float CaptureRequiredTime = 2.0f;
 
 	FOnTargetCaptured OnCaptured;
+
+	[[nodiscard]] const bt::DecisionEmitter* GetEmitter() const { return Emitter; }
 
 private:
 	UPROPERTY(VisibleAnywhere, Category = "Components")
@@ -77,7 +79,9 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	TObjectPtr<UCesiumGlobeAnchorComponent> GlobeAnchor;
 
-	bt::BehaviorTree* Tree = nullptr;
+	bt::BehaviorTree*    Tree    = nullptr;
+	bt::DecisionEmitter* Emitter = nullptr;
+	bt::MonitorServer*   Monitor = nullptr;
 
 	UPROPERTY()
 	TObjectPtr<ADroneActor> CachedDrone;

@@ -1,12 +1,51 @@
 schema_version: "1.0"
 behaviors:
+  - name: captured
+    when: is_captured
+    tree:
+      type: action
+      name: stop
+
+  - name: in_capture_range
+    when: drone_in_capture_range
+    tree:
+      type: sequence
+      name: capture_sequence
+      children:
+        - type: action
+          name: manage_patrol_path
+        - type: action
+          name: stop
+        - type: action
+          name: pulse_beacon_fast
+        - type: action
+          name: increment_capture_timer
+
+  - name: spotted
+    when: drone_in_fov
+    tree:
+      type: sequence
+      name: spotted_sequence
+      children:
+        - type: action
+          name: manage_patrol_path
+        - type: action
+          name: deactivate_beacon
+        - type: action
+          name: set_speed_fast
+        - type: action
+          name: advance_along_path
+
   - name: patrol
     tree:
       type: sequence
+      name: patrol_sequence
       children:
         - type: action
           name: manage_patrol_path
         - type: action
           name: set_speed_normal
+        - type: action
+          name: pulse_beacon_slow
         - type: action
           name: advance_along_path
