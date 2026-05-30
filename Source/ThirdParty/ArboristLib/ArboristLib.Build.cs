@@ -17,7 +17,14 @@ public class ArboristLib : ModuleRules
 
         if (Target.Platform == UnrealTargetPlatform.Win64)
         {
-            PublicAdditionalLibraries.Add(Path.Combine(ModDir, "lib", "Win64", "arborist.lib"));
+            string LibDir = Path.Combine(ModDir, "lib", "Win64");
+            PublicAdditionalLibraries.Add(Path.Combine(LibDir, "arborist.lib"));
+            PublicAdditionalLibraries.Add(Path.Combine(LibDir, "sqlite3.lib"));
+            PublicAdditionalLibraries.Add(Path.Combine(LibDir, "ryml.lib"));
+            PublicAdditionalLibraries.Add(Path.Combine(LibDir, "c4core.lib"));
+            PublicAdditionalLibraries.Add(Path.Combine(LibDir, "brotlienc.lib"));
+            PublicAdditionalLibraries.Add(Path.Combine(LibDir, "brotlidec.lib"));
+            PublicAdditionalLibraries.Add(Path.Combine(LibDir, "brotlicommon.lib"));
             PublicSystemLibraries.Add("ws2_32.lib");
         }
     }

@@ -25,6 +25,8 @@
 
 THIRD_PARTY_INCLUDES_START
 #include "bt/BehaviorTree.h"
+#include "bt/DecisionEmitter.h"
+#include "bt/MonitorServer.h"
 #include "bt/SchemaLoader.h"
 #include "bt/Status.h"
 THIRD_PARTY_INCLUDES_END
@@ -102,8 +104,9 @@ ATargetPawn::ATargetPawn()
 
 ATargetPawn::~ATargetPawn()
 {
-	delete Tree;
-	Tree = nullptr;
+	if (Monitor) { Monitor->stop(); delete Monitor; Monitor = nullptr; }
+	delete Tree;    Tree    = nullptr;
+	delete Emitter; Emitter = nullptr;
 }
 
 void ATargetPawn::BeginPlay()
@@ -342,6 +345,15 @@ void ATargetPawn::BuildTree()
 	std::string YamlStr(TCHAR_TO_UTF8(*YamlContent));
 	bt::BehaviorTree Loaded = bt::SchemaLoader::load(YamlStr, Reg);
 	Tree = new bt::BehaviorTree(std::move(Loaded));
+
+	delete Emitter;
+	Emitter = new bt::DecisionEmitter(32);
+	Tree->setEmitter(Emitter);
+
+	if (Monitor) { Monitor->stop(); delete Monitor; }
+	const std::string UiDir = TCHAR_TO_UTF8(*(FPaths::ProjectDir() / TEXT("ArboristUI")));
+	Monitor = new bt::MonitorServer(*Tree, *Emitter, UiDir);
+	Monitor->start(8080);
 }
 
 void ATargetPawn::UpdateDroneState()
