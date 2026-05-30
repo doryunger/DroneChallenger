@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DroneChallenger — BT</title>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #1e1e2e;
+    color: #cdd6f4;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+  }
+
+  #header { background: #181825; border-bottom: 1px solid #313244; flex-shrink: 0; }
+
+  #title-row {
+    padding: 7px 14px;
+    display: flex; align-items: center; gap: 9px;
+    border-bottom: 1px solid #252538;
+  }
+  #title-row h1 { margin: 0; font-size: 12px; color: #89b4fa; letter-spacing: 0.06em; }
+  .badge { padding: 2px 9px; border-radius: 20px; font-size: 11px; }
+  #tick-badge     { background: #313244; color: #a6adc8; }
+  #behavior-badge { background: #1e3028; color: #a6e3a1; display: none; }
+  #status-badge   { font-weight: 600; display: none; border: 1px solid transparent; }
+  #live-dot       { margin-left: auto; font-size: 10px; color: #a6e3a1; }
+  #live-dot.paused { color: #6c7086; }
+
+  #scrubber-row {
+    padding: 5px 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .ctrl-btn {
+    background: #313244; border: none; color: #cdd6f4;
+    border-radius: 4px; padding: 2px 9px; cursor: pointer;
+    font-size: 11px; font-family: inherit; transition: background 0.12s;
+  }
+  .ctrl-btn:hover  { background: #45475a; }
+  .ctrl-btn:active { background: #585b70; }
+  #btn-play { min-width: 60px; }
+  #scrubber { flex: 1; accent-color: #89b4fa; cursor: pointer; }
+  #tick-counter { font-size: 10px; color: #6c7086; min-width: 54px; text-align: right; white-space: nowrap; }
+
+  #graph { flex: 1; overflow: hidden; }
+
+  #legend {
+    position: fixed; bottom: 14px; right: 14px; z-index: 20;
+    background: #181825; border: 1px solid #313244;
+    border-radius: 7px; padding: 8px 12px; font-size: 10px; min-width: 116px;
+  }
+  #legend-title { color: #6c7086; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; color: #a6adc8; }
+  .legend-item:last-child { margin-bottom: 0; }
+  .ls { width: 15px; height: 11px; flex-shrink: 0; }
+  .ls-sel  { background: #2a1e40; border: 1.5px solid #cba6f7; border-radius: 50%; }
+  .ls-seq  { background: #1e2540; border: 1.5px solid #89b4fa; border-radius: 2px; }
+  .ls-act  { background: #1e3028; border: 1.5px solid #a6e3a1; border-radius: 4px; }
+  .ls-cond { background: #301e28; border: 1.5px solid #f38ba8; transform: rotate(45deg) scale(0.72); }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div id="title-row">
+    <h1>BehaviorTree</h1>
+    <span id="tick-badge"     class="badge">waiting…</span>
+    <span id="behavior-badge" class="badge"></span>
+    <span id="status-badge"   class="badge"></span>
+    <span id="live-dot">● LIVE</span>
+  </div>
+  <div id="scrubber-row">
+    <button id="btn-prev" class="ctrl-btn">◀</button>
+    <input  id="scrubber" type="range" min="0" max="0" value="0" step="1">
+    <button id="btn-next" class="ctrl-btn">▶</button>
+    <button id="btn-play" class="ctrl-btn">⏵ Play</button>
+    <span   id="tick-counter">— / —</span>
+  </div>
+</div>
+
+<div id="graph"></div>
+
+<div id="legend">
+  <div id="legend-title">Node types</div>
+  <div class="legend-item"><div class="ls ls-sel"></div>  Selector</div>
+  <div class="legend-item"><div class="ls ls-seq"></div>  Sequence</div>
+  <div class="legend-item"><div class="ls ls-act"></div>  Action</div>
+  <div class="legend-item"><div class="ls ls-cond"></div> Condition</div>
+</div>
+
+<script src="/viewer.js"></script>
+</body>
+</html>
