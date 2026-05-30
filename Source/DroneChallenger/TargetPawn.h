@@ -51,6 +51,11 @@ public:
 
 	[[nodiscard]] const bt::DecisionEmitter* GetEmitter() const { return Emitter; }
 
+	UPROPERTY(BlueprintReadOnly, Category = "Target|Tracking") float CurrentTrackingTime = 0.0f;
+	UPROPERTY(BlueprintReadOnly, Category = "Target|Tracking") float BestTrackingTime = 0.0f;
+	[[nodiscard]] const FDroneGraph& GetGraph() const { return Graph; }
+	[[nodiscard]] bool IsDroneInFOV() const { return bDroneInFOV; }
+
 private:
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	TObjectPtr<UStaticMeshComponent> Mesh;
@@ -95,6 +100,7 @@ private:
 
 	bool bIsCaptured = false;
 	bool bDroneInFOV = false;
+	bool bWasInFOV = false;
 	bool bDroneInCaptureRange = false;
 	bool bDroneHasLOS = false;
 	bool bOnEvadePath = false;

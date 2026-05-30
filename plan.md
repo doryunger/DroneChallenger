@@ -2,44 +2,36 @@
 
 ## Vision
 
-A first-person drone simulator set in a georeferenced recreation of Munich, built on Unreal Engine 5.7.4 and Cesium for Unreal. The primary game mode is **Search & Destroy**: the player pilots an FPV drone across a 2 km² urban area, locates three hidden targets using the drone's camera, and eliminates them within a 10-minute window.
+A first-person drone simulator set in a georeferenced recreation of Munich, built on Unreal Engine 5.7.4 and Cesium for Unreal. The player pilots an FPV drone across a 2 km² urban area and engages with a BT-driven target vehicle (a patrol car).
 
-Target behaviour is driven by a **Behavior Tree** (Arborist framework) so that target state, visual reactions, and the capture sequence are all governed by a live, inspectable tree — not hardcoded C++ logic. The BT visualiser is displayed alongside the simulator as a collapsible in-game panel, showing in real time which nodes are active as the drone moves.
+Two game modes:
 
-The simulation prioritises physical realism (cascade PID flight controller, thrust-based physics, angle-mode self-levelling) and environmental authenticity (Google Photorealistic 3D Tiles streamed live via Cesium ion).
+**Tracking** — keep the target car in your camera's FOV for as long as possible. The car reacts by speeding up when spotted. Score = longest continuous FOV hold this session.
+
+**Hunting** — get within 1 m of the moving car and hold for the required duration. Only counts after 30 s from session start (the car needs time to move away from spawn). The car does not evade at close range — getting within 1 m is the skill challenge; the car's speed increase when spotted makes the approach harder.
+
+The target's behavior is driven by a live **Behavior Tree** (Arborist framework). A collapsible in-game panel shows the BT visualization in real time alongside the gameplay, demonstrating live AI state inspection.
 
 ---
 
-## Game concept — Search & Destroy
+## Game concept
 
 - **Playspace**: 2 km radius around Marienplatz, Munich (48.1374 °N, 11.5755 °E)
-- **Targets**: 3 ground objects placed at fixed geographic coordinates within the playspace
-- **Time limit**: 10 minutes
-- **Win condition**: all 3 targets captured before time expires
-- **Lose condition**: timer reaches zero with at least one target remaining
+- **Target**: one BT-driven patrol car navigating the Munich road graph
+- **Win condition** (Hunting): maintain capture range (≤ 1 m) for `CaptureRequiredTime` seconds after the 30 s warmup
 
-### Detection & capture loop
+### Target behavior tree (4 priorities)
 
-1. **Search** — drone flies FPV; targets are not marked until found
-2. **Detect** — when a target enters the drone camera's FOV cone within detection range (~300 m), it transitions to *Detected* and appears on the mini-map; the BT reacts by activating the beacon
-3. **Capture** — drone flies within capture radius (~30 m) and holds position for 2 s; the BT drives the capture sequence and fires the captured delegate
-
-Each target runs its own `bt::BehaviorTree` instance (Arborist). The blackboard is fed drone state each tick (distance, in-FOV flag, capture timer). The BT owns all state transitions and visual responses.
+| Priority | Condition | Behavior | In-game effect |
+|---|---|---|---|
+| 1 | `is_captured` | stop | Car freezes permanently |
+| 2 | `drone_in_capture_range` (1 m) | stop + pulse_beacon_fast + increment_capture_timer | Car stops, red beacon flashes |
+| 3 | `drone_in_fov` | manage_patrol_path + deactivate_beacon + set_speed_fast + advance | Car goes dark and accelerates |
+| 4 | *(always)* | manage_patrol_path + set_speed_normal + pulse_beacon_slow + advance | Normal patrol, slow yellow beacon |
 
 ### BT visualiser
 
-A collapsible UMG panel in the corner of the game screen embeds a `WebBrowserWidget` pointed at `http://localhost:8080`. Arborist's `MonitorServer` streams the live active-node path (colour-coded SUCCESS / FAILURE / RUNNING) to that port. As the drone approaches a target, the active BT path visibly changes — showing exactly what the target "knows" and what behaviour it is in.
-
-### HUD elements (Phase 7)
-
-| Element | Position | Shows |
-|---|---|---|
-| Timer | top-left | MM:SS countdown |
-| Target counter | top-left | X / 3 captured |
-| Target lock overlay | world-space rectangle | appears when target is Detected; shows distance in metres |
-| Mini-map | top-right | drone position + heading cone; detected targets as dots |
-| Telemetry bar | bottom | speed (m/s), altitude AGL (m), heading (°) |
-| BT visualiser panel | collapsible corner | live Arborist MonitorServer via WebBrowserWidget |
+A collapsible UMG panel embeds a `WebBrowserWidget` pointed at `http://localhost:8080`. Arborist's `MonitorServer` streams the live active-node path (colour-coded SUCCESS / FAILURE / RUNNING). As the drone approaches the target, the active BT path changes in real time — showing exactly what the car "knows" and what state it is in.
 
 ---
 
@@ -56,238 +48,117 @@ A collapsible UMG panel in the corner of the game screen embeds a `WebBrowserWid
 | Input | Enhanced Input System |
 | UI | UMG + Slate + WebBrowser plugin |
 | Behavior trees | Arborist (C++20 static lib, prebuilt External module at `Source/ThirdParty/ArboristLib/`) |
-| Build modules | Core, CoreUObject, Engine, InputCore, EnhancedInput, CesiumRuntime, UMG, Slate, SlateCore, WebBrowser |
-
----
-
-## Arborist integration overview
-
-Arborist is a standalone C++20 static library (CMake). It has no engine coupling by design. See `context/arborist-integration.md` for full API reference and UE5 wiring details.
-
-**Key classes used:**
-
-| Class | Role |
-|---|---|
-| `bt::BehaviorTree` | Owns root node; call `tree.tick()` each frame |
-| `bt::Blackboard` | Typed key-value store; sources are lambdas polled each tick |
-| `bt::RuntimeRegistry` | Maps action/condition names (from YAML) to C++ lambdas |
-| `bt::SchemaLoader` | Parses YAML schema into node tree at startup |
-| `bt::DecisionEmitter` | Records active path + blackboard snapshot each tick |
-| `bt::MonitorServer` | Embedded HTTP server (port 8080); streams live state to browser |
-
-**Per-target blackboard keys:**
-
-| Key | Type | Source |
-|---|---|---|
-| `drone_distance` | double | distance from target to drone world position (cm) |
-| `drone_in_fov` | bool | camera cone + range check (same logic as detection) |
-| `drone_in_capture_range` | bool | distance < CaptureRadius |
-| `capture_timer` | double | seconds drone has been in capture range continuously |
-| `is_captured` | bool | latched true once capture completes |
-
-**YAML tree (per target):**
-
-```yaml
-priority:
-  - name: Captured
-    condition: is_captured
-    sequence:
-      - action: deactivate_beacon
-
-  - name: InCaptureRange
-    condition: drone_in_capture_range
-    sequence:
-      - action: pulse_beacon_fast
-      - action: increment_capture_timer
-
-  - name: Detected
-    condition: drone_in_fov
-    sequence:
-      - action: pulse_beacon_slow
-
-  - name: Idle
-    sequence:
-      - action: idle
-```
-
-**Integration pattern in UE5:**
-
-Each `ATargetActor` owns a `bt::BehaviorTree` instance (via `TUniquePtr`). On each `Tick`, the actor:
-1. Updates blackboard sources (distance, FOV flag, etc.)
-2. Calls `tree.tick()`
-3. Reads BT output via action lambdas (which directly call UE5 APIs on the actor)
-
-A single `bt::MonitorServer` is started by the game mode at session begin and destroyed at session end. The monitor is attached to the selected target's tree (switchable via the HUD panel).
+| Road navigation | DroneGraph — nodes/edges loaded from `Content/Graph/nodes.csv` + `edges.csv` |
 
 ---
 
 ## Phase history
 
 ### Phase 1 — Munich environment ✅
-Placed a `ACesiumGeoreference` actor anchored at Marienplatz and streamed Google Photorealistic 3D Tiles via Cesium ion. Confirmed terrain, buildings, and roads render correctly within the 2 km playspace.
+Placed a `ACesiumGeoreference` actor anchored at Marienplatz and streamed Google Photorealistic 3D Tiles via Cesium ion.
 
 ### Phase 2 — Terrain elevation probe ✅
-Implemented `ATerrainProbe` — an editor utility actor that calls `ACesium3DTileset::SampleHeightMostDetailed` asynchronously and logs ellipsoidal heights at three Munich test positions. Used to establish the ground altitude baseline for drone spawn placement.
+`ATerrainProbe` — async Cesium height sampling, used to establish ground altitude baseline.
 
-### Phase 3 + 4 — Drone airframe, hover physics, and flight controls ✅
-- `ADroneActor` (APawn) with `UBoxComponent` physics root (35 × 40 × 11 cm, Pawn collision)
-- Hover throttle computed from mass and gravity at BeginPlay; all four rotors seeded to hover value
-- Per-rotor `AddForceAtLocation` for pitch/roll torques; separate `AddTorqueInRadians` for yaw drag
-- Cascade PID flight controller: angle outer loop (self-levelling) → rate inner loop → X-frame motor mixer
-- Enhanced Input bindings: throttle (1D), pitch+roll (2D), yaw (1D), camera toggle
+### Phase 3 + 4 — Drone airframe, hover physics, flight controls ✅
+- `ADroneActor` (APawn) with `UBoxComponent` physics root
+- Cascade PID: angle outer loop → rate inner loop → X-frame motor mixer
+- Enhanced Input: throttle, pitch+roll, yaw, camera toggle
 
-### Phase 5a — Dual camera system ✅
-- Chase camera on a rigid spring arm (yaw-inherit only, −15° pitch, 180 cm arm, building collision)
-- FPV camera nose-mounted on VisualMesh at (18, 0, 9) cm, −15° pitch, 90° FOV
-- Toggle via `IA_SwitchCamera`
+### Phase 5 — Dual camera system + mesh ✅
+- Chase camera (spring arm, yaw-inherit) and FPV camera (nose-mounted, 90° FOV)
+- `UPoseableMeshComponent` for RealisticDroneV2 skeleton; 8 blade props with spin visuals
 
-### Phase 5b — RealisticDroneV2 mesh, flight controller fixes, propeller visuals ✅
-- `UPoseableMeshComponent` for the SK_Realistic_Drone skeleton (visual-only, no physics)
-- 8 `UStaticMeshComponent` blade props positioned via `GetBoneLocation` at runtime; CCW mesh on FL+RR, CW mesh on FR+RL; two blades per motor offset 180°
-- Fixed motor mixer pitch inversion (front rotors now correctly spin up for nose-up command)
-- Propeller spin rate: 4320 deg/s max with per-motor `FInterpTo` spool inertia (MotorSpoolRate = 8)
-- Motor audio pitch mapped from average throttle [0.6×–1.8×]
+### Phase 6a — Arborist in UE5 ✅
+Prebuilt External UBT module (`Source/ThirdParty/ArboristLib/`). Single static lib combining bt_framework + ryml + sqlite3. WebBrowserWidget plugin added.
+
+### Phase 6b — ATargetPawn with Arborist BT ✅
+- Moving patrol car NPC navigating the Munich road graph (`DroneGraph`)
+- 4-priority behavior tree: captured → in_capture_range → spotted → patrol
+- 1 m capture radius; beacon state driven by BT actions
+- `MonitorServer` on port 8080 serving `ArboristUI/viewer.html`
+
+### Phase 7e — BT visualiser panel ✅
+- `ADroneHUD` + `UBTDisplayWidget` (C++) wired to `WBP_BTDisplay` Blueprint
+- `WebBrowserWidget` loads `http://localhost:8080` — live BT tree alongside gameplay
+- Toggleable panel via `TogglePanel()`
+
+---
+
+## Current phase — Phase 7: HUD
+
+**Goal**: in-game UMG overlay providing flight data, spatial awareness, and tracking score.
+
+### 7a — Tracking stats ✅ (C++ complete, Blueprint pending)
+
+`UDroneTrackingWidget` — exposes three BlueprintPure functions:
+- `GetCurrentTrackingTime()` — seconds target has been in FOV continuously this streak
+- `GetBestTrackingTime()` — longest streak this session
+- `IsCurrentlyTracking()` — true while drone_in_fov is active
+
+Tracking logic lives in `ATargetPawn::Tick()` — increments `CurrentTrackingTime` while `bDroneInFOV`, resets on loss of contact, updates `BestTrackingTime` on new high.
+
+**Remaining**: create `WBP_TrackingDisplay` UMG widget in editor; bind Blueprint text blocks to the three functions; anchor to top-left or top-right of screen.
+
+### 7b — Mini map ✅ (C++ complete, Blueprint pending)
+
+`UDroneMiniMapWidget` — NativePaint renders:
+- Road network from `DroneGraph` (nodes/edges projected to 2D, 500 m radius)
+- North-up map; heading indicator tick on compass ring
+- N / E / S / W labels on ring edge
+- 2D FOV frustum cone from drone icon (90° horizontal, detection range length)
+- Drone arrow at center; target dot (yellow when in FOV, red otherwise)
+
+**Remaining**: create `WBP_MiniMap` in editor; set widget size (e.g., 220 × 220); anchor to corner; assign `WBP_MiniMap` class to `ADroneHUD::MiniMapWidgetClass` in `BP_DroneHUD`.
+
+### 7c — Attitude arc ✅ (C++ complete, Blueprint pending)
+
+`UDroneAttitudeWidget` — NativePaint renders:
+- Semicircular arc border with horizontal wings (∩ shape)
+- Moving horizon line: tilts with roll, shifts vertically with pitch
+- Fixed reference wings marking level flight
+- Pitch scale ticks at ±10° and ±20°
+
+Placed below the drone center crosshair.
+
+**Remaining**: create `WBP_AttitudeArc` in editor; anchor to screen center + offset down; assign class in `BP_DroneHUD`.
 
 ---
 
 ## Planned phases
 
-### Phase 6 — Arborist integration + target system
+### Phase 8 — Telemetry bar
+- Speed (m/s), altitude AGL (m), heading (°)
+- Single horizontal bar at bottom of screen
+- Data from `ADroneActor::GetVelocity()`, `GetActorLocation().Z`, `GetActorRotation().Yaw`
 
-**Goal**: Arborist running inside UE5, three BT-driven targets in the Munich playspace, live BT visualiser in-game.
+### Phase 9 — Hunting mode timer
+- 30 s warmup indicator at session start (countdown before capture zone activates)
+- Capture hold timer (counts up while within 1 m after warmup)
+- Logic lives in `ATargetPawn` or a dedicated game mode
 
-#### 6a — Arborist in UE5 ✅
+### Phase 10 — Settings menu
+- Pause on Escape; sliders for PID gains and flight envelope parameters
+- Persisted via `UGameUserSettings` subclass
 
-Arborist is integrated as a **prebuilt External UBT module** (`Source/ThirdParty/ArboristLib/`).
-
-- `arborist.lib` (86 MB) combines `bt_framework + ryml + c4core + sqlite3 + brotli` into a single static lib via `lib.exe`
-- Built from `github.com/doryunger/arborist` using **vcpkg overlay port** (`arborist/vcpkg-port/`) with the `x64-windows-static-md` triplet — static `.lib` output compiled with `/MD` to match UE5's CRT
-- yaml-cpp replaced with **ryml** (rapidyaml) to eliminate `__std_find_last_not_ch_pos_1` linker errors caused by yaml-cpp's vectorised STL string intrinsics not being available in UE5's link environment
-- `ArboristLib.Build.cs` registers the lib and public headers as `ModuleType.External`
-- `lib/` and `include/` are gitignored — populated by a setup script (deferred to Phase 9)
-- `TerrainProbe.cpp` fix: `#include "Windows/WindowsHWrapper.h"` + `#undef OPAQUE / TRANSPARENT` inserted before `#include "Cesium3DTileset.h"` to prevent Windows GDI macros from breaking CesiumGltf template instantiation under MSVC's conformant preprocessor (`/Zc:preprocessor`)
-- `WebBrowserWidget` plugin added to uproject; `WebBrowser` module added to `Build.cs`
-- Smoke test: `ATerrainProbe::BeginPlay` parses a one-action YAML schema, ticks the tree, and logs `ArboristLib smoke test: PASS`
-
-**Done when**: project compiles cleanly with Arborist linked; a minimal tree ticks without crash in PIE.
-
-#### 6b — `ATargetPawn` with Arborist BT ✅
-
-New files: `Source/DroneChallenger/TargetPawn.h/.cpp`, `TargetAIController.h/.cpp`, `PatrolPath.h/.cpp`
-
-Targets are moving ground vehicle NPCs (`APawn`), not static actors.
-
-- `ATargetPawn : APawn` — possessed by `ATargetAIController` (`AutoPossessAI = PlacedInWorldOrSpawned`); owns `bt::BehaviorTree*`
-- `APatrolPath` — `AActor` with `USplineComponent` root; placed in the level along Munich road segments; referenced by `ATargetPawn::PatrolPath`
-- Movement: BT sets `CurrentSpeed` (`set_speed_normal` / `set_speed_fast` / `stop`), then `advance_along_path` advances `SplineDistance` along the spline. Ground clamping via synchronous downward line trace against Cesium tile collision geometry.
-- BT behaviors (priority order):
-
-| Behavior | Condition | Actions |
-|---|---|---|
-| `captured` | `is_captured` | stop, deactivate_beacon |
-| `in_capture_range` | `drone_in_capture_range` | stop, pulse_beacon_fast, increment_capture_timer |
-| `evading` | `drone_in_fov` | set_speed_fast, pulse_beacon_fast, advance_along_path |
-| `patrol` | *(always)* | set_speed_normal, pulse_beacon_slow, advance_along_path |
-
-- FOV detection: `PlayerController::GetControlRotation().Vector()` dot product ≥ 0.707 within `DetectionRange` (300 m)
-- `FOnTargetCaptured` multicast delegate fires after 2 s continuous hold in capture radius (30 m)
-- YAML schema: `Content/BT/target.yaml`
-
-Three instances placed in the Munich level at fixed geographic positions:
-
-| Target | Latitude | Longitude | Notes |
-|---|---|---|---|
-| T1 | 48.1503 | 11.5754 | Englischer Garten north edge (~1.4 km N) |
-| T2 | 48.1348 | 11.5764 | Viktualienmarkt area (~300 m S) |
-| T3 | 48.1368 | 11.5944 | Isar east bank (~1.4 km E) |
-
-**Done when**: pawns patrol their splines; beacon reacts correctly to drone proximity and detection; vehicle stops and capture completes after 2 s hold; delegate fires.
-
-#### 6c — `ASearchDestroyGameMode` + `ASearchDestroyGameState`
-
-New files: `SearchDestroyGameMode.h/.cpp`, `SearchDestroyGameState.h/.cpp`
-
-- `ASearchDestroyGameState`: `RemainingTime`, `CapturedCount`, `TotalTargets`, `bSessionActive`, `bPlayerWon`
-- `ASearchDestroyGameMode`: gathers all `ATargetPawn` at BeginPlay; starts 600 s countdown; owns the `bt::MonitorServer` (port 8080); handles win/lose
-- MonitorServer attached to T1's tree by default; switchable from HUD
-
-**Done when**: session starts, timer counts down, all three captures trigger win, timeout triggers lose, MonitorServer serves live data at `localhost:8080`.
-
-#### 6d — Road path system & target behaviour refinement
-
-**Goal**: replace manually-drawn splines with road-accurate patrol paths derived from OSM data. Same dataset drives both pawn movement and mini-map road rendering.
-
-- Export Munich 2 km playspace road network from OpenStreetMap (Overpass Turbo bbox query) as GeoJSON → committed to `Content/Roads/munich_roads.json`
-- `APatrolPath` gains a `RoadFeatureId` property (editor-assigned string matching a GeoJSON feature ID); `BeginPlay` loads the file, finds the feature, iterates its lat/lon waypoints, converts each via `ACesiumGeoreference::TransformLongitudeLatitudeHeightToUnreal` at a fixed ellipsoidal altitude, and calls `USplineComponent::SetSplinePoints`. Waypoints are 2D — altitude is ignored because `AdvanceAlongPath` already line-traces to terrain and adds 50 cm.
-- Each `ATargetPawn` keeps the same `PatrolPath` reference; no changes to movement or BT logic.
-- Mini-map road underlay (pre-work for Phase 7c): the same GeoJSON polylines are projected to mini-map UV coordinates using the same lat/lon → normalised-offset formula used for the drone position dot.
-- BT behaviour refinement as needed (e.g. evasion direction, reaction timing) after observing targets in PIE.
-
-**Done when**: all three pawns follow real Munich road geometry without any manual spline editing; roads visible on mini-map.
+### Phase 11 — Packaging
+- Windows 64-bit shipping build
+- Arborist setup script (`setup.ps1`) to rebuild the static lib on fresh machines
+- MonitorServer disabled in shipping (`#if !UE_BUILD_SHIPPING`)
 
 ---
 
-### Phase 7 — HUD
-
-**Goal**: in-game UMG overlay making game state legible; BT visualiser panel alongside the main view.
-
-#### 7a — Game state bar
-- Timer (MM:SS), target counter (X/3), wired to `ASearchDestroyGameState`
-
-#### 7b — Target lock overlay
-- World-space projection of detected target position (`UGameplayStatics::ProjectWorldToScreen`)
-- Rectangle + distance label; disappears on capture
-
-#### 7c — Mini-map
-- Overhead drone icon + heading cone
-- Detected targets as coloured dots; active targets hidden; captured targets faded
-- 2 km radius in mini-map bounds
-
-#### 7d — Telemetry bar
-- Speed (m/s), altitude AGL (m, periodic Cesium height sample every 2 s), heading (°)
-
-#### 7e — BT visualiser panel
-- Collapsible UMG panel; `WebBrowserWidget` loading `http://localhost:8080`
-- Toggle key (e.g. Tab) shows/hides panel
-- Dropdown to switch which target's tree is displayed (T1 / T2 / T3)
-- MonitorServer reattached to selected tree on switch
-
----
-
-### Phase 8 — Settings menu
-
-**Goal**: in-game pause menu exposing flight controller parameters.
-
-- Accessible via Escape
-- Sliders: `MaxTiltAngle`, `AngleGain`, `MaxYawRate`, `ThrottleRange`, `LinearDamping`, `AngularDamping`
-- Changes apply live to the active `ADroneActor`
-- Persisted via `UGameUserSettings` subclass to `Saved/Config`
-- `UDroneSettingsWidget` (UUserWidget, C++ only)
-
----
-
-### Phase 9 — Packaging & release
-
-**Goal**: distributable Windows build.
-
-- Main menu level (start, settings, quit)
-- `RealisticDroneV2` cooked into build (gitignored, baked at package time)
-- **Arborist setup script** (`setup.ps1`): installs vcpkg if absent; runs `vcpkg install arborist-poc:x64-windows-static-md --overlay-ports=<arborist-repo>/vcpkg-port`; combines output static libs with `lib.exe` into `arborist.lib`; copies `bt/` headers — must run once before opening the project on a fresh machine
-- MonitorServer and EditorServer disabled in shipping build (`#if !UE_BUILD_SHIPPING`)
-- Windows 64-bit shipping configuration; Cesium streaming budget tuned for 2 km playspace
-- Frame-rate floor check: stable 60 FPS during active BT ticking + terrain streaming
-
----
-
-## Open items / known issues
+## Open items
 
 | Item | Status |
 |---|---|
-| Yaw direction (CW vs CCW) unverified in-engine | Needs one PIE test — if yaw-right turns left, negate `YawSpin[4]` in `ApplyRotorForces` |
-| Target vehicle mesh not chosen | Any static mesh assignable to `ATargetActor` in editor |
-| Drone spawn altitude | Currently editor-placed Z; should be terrain-sampled via Cesium before Phase 6b |
-| Arborist setup script | Written in Phase 9 — clones arborist repo, builds lib, populates ThirdParty dirs |
-| MonitorServer multi-target switching | One server, one tree at a time — switching requires `monitor.attachTree(&newTree)` |
+| WBP_TrackingDisplay Blueprint | Not started |
+| WBP_MiniMap Blueprint | Not started |
+| WBP_AttitudeArc Blueprint | Not started |
+| Hunting mode 30 s warmup logic | Not started |
+| Telemetry bar | Not started |
+| Arborist setup script | Deferred to Phase 11 |
+| Multi-target switching in MonitorServer | Not needed for single-target mode |
 
 ---
 
@@ -295,29 +166,35 @@ New files: `SearchDestroyGameMode.h/.cpp`, `SearchDestroyGameState.h/.cpp`
 
 ```
 DroneChallenger/
-├── plan.md                               ← this file
-├── CLAUDE.md                             ← development rules
+├── plan.md
+├── CLAUDE.md
 ├── context/
-│   ├── flight-controller.md              ← PID cascade, motor mixer, sign conventions
-│   ├── actor-architecture.md             ← component hierarchy, blade system, cameras
-│   ├── coordinate-system.md             ← UE5 world frame, Cesium coords, Munich anchor
-│   └── arborist-integration.md          ← Arborist API reference, UE5 wiring pattern
+│   ├── flight-controller.md
+│   ├── actor-architecture.md
+│   ├── coordinate-system.md
+│   └── arborist-integration.md
 ├── Content/
-│   └── BT/
-│       └── target.yaml                   ← shared BT schema for all three targets
+│   ├── BT/target.yaml
+│   ├── Graph/nodes.csv + edges.csv
+│   ├── BP_DroneGameMode.uasset
+│   ├── BP_DroneHUD.uasset
+│   └── WBP_BTDisplay.uasset
 └── Source/
-    ├── ThirdParty/
-    │   └── ArboristLib/                  ← External UBT module; lib/ and include/ gitignored, populated by setup.ps1
+    ├── ThirdParty/ArboristLib/
     └── DroneChallenger/
-        ├── DroneActor.h/.cpp             ← APawn: physics, mesh, cameras, input, audio
-        ├── DroneFlightController.h/.cpp  ← cascade angle-mode PID
-        ├── DroneMotorMixer.h             ← X-frame mixing table
-        ├── DronePIDController.h          ← generic PID with derivative-on-measurement
-        ├── TargetPawn.h/.cpp             ← APawn: BT-driven moving NPC target (Phase 6b)
-        ├── TargetAIController.h/.cpp     ← minimal AAIController for TargetPawn (Phase 6b)
-        ├── PatrolPath.h/.cpp             ← AActor + USplineComponent road path (Phase 6b)
-        ├── SearchDestroyGameMode.h/.cpp  ← session timer, MonitorServer (Phase 6c)
-        ├── SearchDestroyGameState.h/.cpp ← replicated session state (Phase 6c)
-        ├── TerrainProbe.h/.cpp           ← editor utility: Cesium height sampling
-        └── DroneChallenger.Build.cs      ← module + Arborist + AIModule dependencies
+        ├── DroneActor.h/.cpp
+        ├── DroneFlightController.h/.cpp
+        ├── DroneMotorMixer.h
+        ├── DronePIDController.h
+        ├── DroneGraph.h/.cpp
+        ├── TargetPawn.h/.cpp
+        ├── TargetAIController.h/.cpp
+        ├── PatrolPath.h/.cpp
+        ├── DroneHUD.h/.cpp
+        ├── BTDisplayWidget.h/.cpp
+        ├── DroneTrackingWidget.h/.cpp
+        ├── DroneMiniMapWidget.h/.cpp
+        ├── DroneAttitudeWidget.h/.cpp
+        ├── DroneGameMode.h/.cpp
+        └── DroneChallenger.Build.cs
 ```
