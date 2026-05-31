@@ -84,10 +84,12 @@ int32 UDronePFDWidget::NativePaint(
 
 	auto MakeBox = [&](FVector2D TL, FVector2D BR, const FColor& Col)
 	{
-		const FLinearColor LC = FLinearColor(Col);
+		const FSlateColorBrush Brush(FLinearColor(Col));
 		FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
-			AllottedGeometry.ToPaintGeometry(TL, BR - TL),
-			&FSlateColorBrush(LC));
+			AllottedGeometry.ToPaintGeometry(
+				FVector2f((float)(BR.X - TL.X), (float)(BR.Y - TL.Y)),
+				FSlateLayoutTransform(FVector2f((float)TL.X, (float)TL.Y))),
+			&Brush);
 	};
 
 	auto LocalToAbs = [&](FVector2D P) -> FVector2f
@@ -102,9 +104,12 @@ int32 UDronePFDWidget::NativePaint(
 		const SlateIndex B = (SlateIndex)Verts.Num();
 		auto AV = [&](float X, float Y) {
 			FSlateVertex V;
-			V.Position  = LocalToAbs(FVector2D(X, Y));
-			V.TexCoords = FVector4f(0.5f, 0.5f, 0.5f, 0.5f);
-			V.Color     = Col;
+			V.Position     = LocalToAbs(FVector2D(X, Y));
+			V.TexCoords[0] = 0.5f;
+			V.TexCoords[1] = 0.5f;
+			V.TexCoords[2] = 0.5f;
+			V.TexCoords[3] = 0.5f;
+			V.Color        = Col;
 			Verts.Add(V);
 		};
 		AV(X1, Y1); AV(X2, Y1); AV(X2, Y2); AV(X1, Y2);

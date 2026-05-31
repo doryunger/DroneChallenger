@@ -80,9 +80,12 @@ int32 UDroneMiniMapWidget::NativePaint(
 	auto AddAbsVert = [&](TArray<FSlateVertex>& V, float LX, float LY, FColor C)
 	{
 		FSlateVertex Vert;
-		Vert.Position  = LocalToAbs(FVector2D(LX, LY));
-		Vert.TexCoords = FVector4f(0.5f, 0.5f, 0.5f, 0.5f);
-		Vert.Color     = C;
+		Vert.Position     = LocalToAbs(FVector2D(LX, LY));
+		Vert.TexCoords[0] = 0.5f;
+		Vert.TexCoords[1] = 0.5f;
+		Vert.TexCoords[2] = 0.5f;
+		Vert.TexCoords[3] = 0.5f;
+		Vert.Color        = C;
 		V.Add(Vert);
 	};
 
