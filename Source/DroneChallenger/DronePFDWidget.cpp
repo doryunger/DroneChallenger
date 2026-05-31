@@ -82,14 +82,17 @@ int32 UDronePFDWidget::NativePaint(
 			Pts, ESlateDrawEffect::None, Col, bAA, Thick);
 	};
 
+	static const FSlateBrush* const kWhiteBrush = FCoreStyle::Get().GetBrush("WhiteBrush");
+
 	auto MakeBox = [&](FVector2D TL, FVector2D BR, const FColor& Col)
 	{
-		const FSlateColorBrush Brush(FLinearColor(Col));
 		FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
 			AllottedGeometry.ToPaintGeometry(
 				FVector2f((float)(BR.X - TL.X), (float)(BR.Y - TL.Y)),
 				FSlateLayoutTransform(FVector2f((float)TL.X, (float)TL.Y))),
-			&Brush);
+			kWhiteBrush,
+			ESlateDrawEffect::None,
+			FLinearColor(Col));
 	};
 
 	auto LocalToAbs = [&](FVector2D P) -> FVector2f
