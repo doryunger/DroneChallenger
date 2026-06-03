@@ -367,8 +367,6 @@ void ATargetPawn::UpdateDroneState()
 {
 	if (bIsCaptured) return;
 
-	bDroneInFOV = ComputeDroneInFOV();
-
 	if (IsValid(CachedDrone))
 	{
 		const float Dist = FVector::Distance(GetActorLocation(), CachedDrone->GetActorLocation());
@@ -390,6 +388,8 @@ void ATargetPawn::UpdateDroneState()
 		bDroneHasLOS         = false;
 	}
 
+	bDroneInFOV = ComputeDroneInFOV();
+
 	if (!bDroneInCaptureRange)
 		CaptureTimer = 0.0f;
 
@@ -403,16 +403,16 @@ void ATargetPawn::UpdateDroneState()
 
 bool ATargetPawn::ComputeDroneInFOV() const
 {
-	if (!CachedDrone) return false;
+	if (!CachedDrone || !bDroneHasLOS) return false;
 
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	if (!PC || PC->GetPawn() != CachedDrone) return false;
 
-	float Dist = FVector::Distance(GetActorLocation(), CachedDrone->GetActorLocation());
+	const float Dist = FVector::Distance(GetActorLocation(), CachedDrone->GetActorLocation());
 	if (Dist > DetectionRange) return false;
 
-	FVector CamDir = PC->GetControlRotation().Vector();
-	FVector ToTarget = (GetActorLocation() - CachedDrone->GetActorLocation()).GetSafeNormal();
+	const FVector CamDir   = PC->GetControlRotation().Vector();
+	const FVector ToTarget = (GetActorLocation() - CachedDrone->GetActorLocation()).GetSafeNormal();
 
 	return FVector::DotProduct(CamDir, ToTarget) >= 0.707f;
 }
