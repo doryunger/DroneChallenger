@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HUD Studio — DroneChallenger</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    background: #0a0c0f;
+    color: #c8d0e0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 13px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 20px;
+    background: #0e1117;
+    border-bottom: 1px solid #1e2535;
+    flex-shrink: 0;
+}
+.brand  { font-size: 13px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: #5599ff; }
+.project { font-size: 11px; color: #3a4a68; letter-spacing: 1px; }
+.nav { margin-left: auto; display: flex; gap: 4px; }
+.nav-btn {
+    background: none; border: 1px solid #1e2535; color: #5a6a88;
+    padding: 4px 14px; border-radius: 4px; cursor: pointer;
+    font-size: 11px; letter-spacing: 0.5px; transition: all 0.15s;
+}
+.nav-btn:hover  { border-color: #2a3a55; color: #8899bb; }
+.nav-btn.active { background: #0e1a2e; border-color: #2a4a8a; color: #6699cc; }
+
+.workspace {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* ── Controls panel ── */
+.controls {
+    width: 250px;
+    flex-shrink: 0;
+    background: #0e1117;
+    border-right: 1px solid #161d2a;
+    overflow-y: auto;
+    padding: 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+.section-title {
+    font-size: 9px; font-weight: 700; letter-spacing: 2.5px;
+    text-transform: uppercase; color: #2a5a9a;
+    border-bottom: 1px solid #141d2e; padding-bottom: 6px; margin-bottom: 10px;
+}
+.ctrl-row { margin-bottom: 11px; }
+.ctrl-label {
+    display: flex; justify-content: space-between;
+    color: #7a8fa8; font-size: 11px; margin-bottom: 5px;
+}
+.ctrl-value {
+    color: #88aadd; font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 11px; min-width: 54px; text-align: right;
+}
+input[type=range] {
+    width: 100%; height: 3px;
+    -webkit-appearance: none; appearance: none;
+    background: #161e2e; border-radius: 2px; outline: none; cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 13px; height: 13px; border-radius: 50%;
+    background: #3a7aee; border: 2px solid #0e1a3a; cursor: pointer;
+    transition: background 0.1s;
+}
+input[type=range]::-webkit-slider-thumb:hover { background: #5599ff; }
+
+.toggle-row {
+    display: flex; align-items: center; gap: 8px;
+    cursor: pointer; user-select: none;
+    color: #6a7a98; font-size: 11px; margin-bottom: 10px;
+}
+.toggle-row:hover { color: #8a9ab8; }
+.track {
+    width: 30px; height: 15px; border-radius: 8px;
+    background: #141c2a; border: 1px solid #1e2a3e;
+    position: relative; transition: background 0.15s; flex-shrink: 0;
+}
+.track.on { background: #0e2a5a; border-color: #2a5aaa; }
+.thumb {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: #2a3a50; position: absolute; top: 1px; left: 1px;
+    transition: left 0.15s, background 0.15s;
+}
+.track.on .thumb { left: 16px; background: #5599ff; }
+
+/* ── Preview ── */
+.preview {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: #080a0e; gap: 14px; position: relative; overflow: hidden;
+}
+.preview::before {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none;
+    background-image:
+        linear-gradient(rgba(20,30,50,0.35) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(20,30,50,0.35) 1px, transparent 1px);
+    background-size: 40px 40px;
+}
+.canvas-wrap { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+canvas {
+    display: block;
+    box-shadow: 0 0 0 1px #111a2a, 0 8px 40px rgba(20,50,120,0.25);
+    background: transparent;
+}
+.size-row { display: flex; gap: 5px; }
+.size-btn {
+    background: none; border: 1px solid #161e2e; color: #4a5a78;
+    padding: 3px 11px; border-radius: 3px; cursor: pointer; font-size: 10px;
+    transition: all 0.1s;
+}
+.size-btn:hover  { border-color: #2a3a55; color: #7a8aa8; }
+.size-btn.active { border-color: #1e3a6a; color: #5588cc; background: #0a1222; }
+
+.statusbar {
+    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+    font-family: 'Consolas', monospace; font-size: 10px;
+    color: #2a3a58; letter-spacing: 1px; white-space: nowrap;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="brand">HUD Studio</span>
+  <span class="project">/ DroneChallenger</span>
+  <div class="nav">
+    <button class="nav-btn active">MiniMap</button>
+  </div>
+</header>
+
+<div class="workspace">
+
+  <aside class="controls">
+
+    <div>
+      <div class="section-title">Drone</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Altitude <span class="ctrl-value" id="v-alt">100 m</span></div>
+        <input type="range" id="s-alt" min="10" max="400" value="100" step="1">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Heading <span class="ctrl-value" id="v-yaw">0°</span></div>
+        <input type="range" id="s-yaw" min="0" max="359" value="0" step="1">
+      </div>
+      <div class="toggle-row" onclick="toggleAnim('heading')">
+        <div class="track" id="t-heading"><div class="thumb"></div></div>
+        Auto-rotate heading
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Map</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Map Radius <span class="ctrl-value" id="v-mrad">500 m</span></div>
+        <input type="range" id="s-mrad" min="100" max="2000" value="500" step="10">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Ref Altitude <span class="ctrl-value" id="v-ralt">100 m</span></div>
+        <input type="range" id="s-ralt" min="20" max="300" value="100" step="5">
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">FOV Cone</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">FOV Angle <span class="ctrl-value" id="v-fov">90°</span></div>
+        <input type="range" id="s-fov" min="15" max="150" value="90" step="1">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Det. Range <span class="ctrl-value" id="v-det">300 m</span></div>
+        <input type="range" id="s-det" min="30" max="800" value="500" step="10">
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Target</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Bearing <span class="ctrl-value" id="v-tb">45°</span></div>
+        <input type="range" id="s-tb" min="0" max="359" value="45" step="1">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Range <span class="ctrl-value" id="v-tr">40%</span></div>
+        <input type="range" id="s-tr" min="0" max="100" value="40" step="1">
+      </div>
+      <div class="toggle-row" onclick="toggleAnim('target')">
+        <div class="track" id="t-target"><div class="thumb"></div></div>
+        Auto-orbit target
+      </div>
+    </div>
+
+  </aside>
+
+  <main class="preview">
+    <div class="canvas-wrap">
+      <canvas id="cv" width="400" height="400"></canvas>
+      <div class="size-row">
+        <button class="size-btn" onclick="setSize(240)">240 × 240 (game)</button>
+        <button class="size-btn active" onclick="setSize(400)">400 × 400 (studio)</button>
+      </div>
+    </div>
+    <div class="statusbar" id="statusbar">ALT 100 m · YAW 0° · FOV 90°</div>
+  </main>
+
+</div>
+
+<script src="graph_data.js"></script>
+<script>
+'use strict';
+
+/* ─── constants ──────────────────────────────────────────── */
+const ROAD_BACK_MIN = 6;   const ROAD_BACK_MAX = 22;
+const ROAD_MIN      = 3.5; const ROAD_MAX      = 13;
+
+/* ─── colours ────────────────────────────────────────────── */
+const COL = {
+    bg:      'rgba(5,7,12,0.92)',
+    ring:    'rgba(55,62,90,0.92)',
+    roadBack: 'rgba(0,0,0,0.88)',
+    road:     'rgba(165,170,178,0.88)',
+    fovFill: 'rgba(100,200,255,0.13)',
+    fovEdge: 'rgba(120,220,255,0.86)',
+    tgt:    'rgba(215,30,30,1)',
+    tgtLit: 'rgba(255,70,70,1)',
+    compass: 'rgba(140,148,170,0.75)',
+    heading: '#55a5ff',
+};
+
+/* ─── real road graph (Marienplatz Munich, from nodes.csv / edges.csv) ── */
+const ROADS = (function buildFromCsvData() {
+    const nodes = {}, adj = {};
+    for (const [id, pos] of Object.entries(GRAPH_NODES)) {
+        const nid = +id;
+        nodes[nid] = { x: pos[0], y: pos[1] };
+        adj[nid]   = [];
+    }
+    for (const [a, b] of GRAPH_EDGES) {
+        if (adj[a] && adj[b]) {
+            adj[a].push(b);
+            adj[b].push(a);
+        }
+    }
+    return { nodes, adj };
+})();
+
+/* ─── state ─────────────────────────────────────────────── */
+const S = {
+    altM:    100,  yawDeg:  0,
+    mradM:   500,  raltM:   100,
+    fovDeg:  90,   detM:    500,
+    tgtBear: 45,   tgtPct:  40,
+};
+const animOn = { heading: false, target: false };
+
+/* ─── slider wiring ──────────────────────────────────────── */
+const sliders = [
+    ['s-alt',  'v-alt',  'altM',    v => v + ' m'],
+    ['s-yaw',  'v-yaw',  'yawDeg',  v => v + '°'],
+    ['s-mrad', 'v-mrad', 'mradM',   v => v + ' m'],
+    ['s-ralt', 'v-ralt', 'raltM',   v => v + ' m'],
+    ['s-fov',  'v-fov',  'fovDeg',  v => v + '°'],
+    ['s-det',  'v-det',  'detM',    v => v + ' m'],
+    ['s-tb',   'v-tb',   'tgtBear', v => v + '°'],
+    ['s-tr',   'v-tr',   'tgtPct',  v => v + '%'],
+];
+for (const [sid, vid, key, fmt] of sliders) {
+    const el = document.getElementById(sid);
+    el.addEventListener('input', () => {
+        S[key] = parseFloat(el.value);
+        document.getElementById(vid).textContent = fmt(S[key]);
+    });
+}
+
+function toggleAnim(k) {
+    animOn[k] = !animOn[k];
+    document.getElementById('t-' + k).classList.toggle('on', animOn[k]);
+}
+
+/* ─── canvas sizing ─────────────────────────────────────── */
+const CV = document.getElementById('cv');
+
+function setSize(sz) {
+    CV.width = CV.height = sz;
+    document.querySelectorAll('.size-btn').forEach(b =>
+        b.classList.toggle('active', b.textContent.startsWith(sz)));
+}
+
+/* ─── maths helpers ─────────────────────────────────────── */
+const lerp  = (a, b, t) => a + (b - a) * t;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const deg   = d => d * Math.PI / 180;
+
+/* ─── world-space segment clip ──────────────────────────── */
+function clipSeg(ax, ay, bx, by, clipR) {
+    const R2  = clipR * clipR;
+    const aIn = ax * ax + ay * ay <= R2;
+    const bIn = bx * bx + by * by <= R2;
+    if (aIn && bIn) return [ax, ay, bx, by];
+
+    const dx = bx - ax, dy = by - ay;
+    const a  = dx * dx + dy * dy;
+    if (a < 1e-8) return null;
+    const b    = 2 * (ax * dx + ay * dy);
+    const c    = ax * ax + ay * ay - R2;
+    const disc = b * b - 4 * a * c;
+    if (disc < 0) return null;
+
+    const sq = Math.sqrt(disc);
+    const t0 = (-b - sq) / (2 * a);
+    const t1 = (-b + sq) / (2 * a);
+    const px  = t => ax + t * dx;
+    const py  = t => ay + t * dy;
+
+    if (aIn) { const t = clamp(t1, 0, 1); return [ax, ay, px(t), py(t)]; }
+    if (bIn) { const t = clamp(t0, 0, 1); return [px(t), py(t), bx, by]; }
+    if (t1 < 0 || t0 > 1 || t0 >= t1) return null;
+    return [px(clamp(t0, 0, 1)), py(clamp(t0, 0, 1)),
+            px(clamp(t1, 0, 1)), py(clamp(t1, 0, 1))];
+}
+
+/* ─── minimap renderer ──────────────────────────────────── */
+function draw(ctx, W, H) {
+    const cx = W / 2, cy = H / 2;
+    const R  = Math.min(cx, cy) * 0.78 - 2;
+
+    /* altitude zoom */
+    const mapRadCm  = S.mradM * 100;
+    const detRangCm = S.detM  * 100;
+    const altFac    = clamp(Math.max(S.altM, 10) / Math.max(S.raltM, 1), 0.15, 6);
+    const effRadCm  = clamp(mapRadCm * altFac, 8000, 20000000);
+    const scale     = R / effRadCm;
+    const clipR   = effRadCm * 0.76;
+
+    // Road width scales with altitude: widest at ground, minimum from 150 m up
+    const altT     = clamp((S.altM - 20) / (150 - 20), 0, 1);
+    const roadBackW = lerp(ROAD_BACK_MAX, ROAD_BACK_MIN, altT);
+    const roadW     = lerp(ROAD_MAX,      ROAD_MIN,      altT);
+
+    /*
+     * 2.5D perspective projection — camera pitched above and in front of drone.
+     * sN = forward distance in screen-pixels (positive = ahead = North in heading-up).
+     * k  = perspective scale: shrinks as sN grows (things ahead appear smaller/closer
+     *      to centre), expands for negative sN (things behind appear larger).
+     * Result: N-S road lines converge toward a vanishing point at the top;
+     *         E-W lines stay horizontal but compress with distance.
+     */
+    const pitch    = 0.70;                // camera tilt from vertical (~40°)
+    const focal    = R * 0.9;             // focal length — controls perspective strength
+    const sinP     = Math.sin(pitch);
+    const cosP     = Math.cos(pitch);
+
+    function ts(relN, relE) {
+        const sX = relE * scale;
+        const sN = relN * scale;          // positive = ahead (forward)
+        const k  = focal / (focal + sN * sinP);
+        return [cx + sX * k, cy - sN * cosP * k];
+    }
+
+    /*
+     * Heading-up world transform.
+     * Rotate every world point by -yawRad so the drone's forward direction
+     * always maps to "North" in ts(), which maps to UP on screen.
+     * Formula: rotN = relN*cos(yr) + relE*sin(yr)
+     *          rotE = -relN*sin(yr) + relE*cos(yr)
+     */
+    const yr   = deg(S.yawDeg);
+    const cosY = Math.cos(yr), sinY = Math.sin(yr);
+    function ws(relN, relE) {
+        return ts(relN * cosY + relE * sinY,
+                 -relN * sinY + relE * cosY);
+    }
+
+    /* FOV: scales with altitude, always centred on screen-up (drone forward) */
+    const frustLen = Math.min(detRangCm, clipR * 0.95);
+    const halfFov  = deg(S.fovDeg / 2);
+    function fovPt(a) {
+        return ts(Math.cos(a) * frustLen, Math.sin(a) * frustLen);
+    }
+
+    /* target in heading-up world space */
+    const tBr   = deg(S.tgtBear);
+    const tDist = (S.tgtPct / 100) * clipR;
+    const [tSx, tSy] = ws(tDist * Math.cos(tBr), tDist * Math.sin(tBr));
+
+    /* target-in-FOV: angle of target relative to drone heading */
+    let relAng = tBr - yr;
+    while (relAng >  Math.PI) relAng -= 2 * Math.PI;
+    while (relAng < -Math.PI) relAng += 2 * Math.PI;
+    const tInFov = Math.abs(relAng) <= halfFov && tDist <= frustLen;
+
+    /* ── clear ── */
+    ctx.clearRect(0, 0, W, H);
+
+    /* ── 1. background circle + clip ── */
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, 2 * Math.PI);
+    ctx.fillStyle = COL.bg;
+    ctx.fill();
+    ctx.clip();
+
+    /* ── 2. roads (heading-up: use ws() for all world points) ── */
+    const bpR2 = (clipR * 2) ** 2;
+    ctx.lineCap = ctx.lineJoin = 'round';
+
+    const screenSegs = [];
+    for (const [id, nbrs] of Object.entries(ROADS.adj)) {
+        const na = ROADS.nodes[+id];
+        for (const nb_id of nbrs) {
+            if (nb_id <= +id) continue;
+            const nb = ROADS.nodes[nb_id];
+            if (na.x * na.x + na.y * na.y > bpR2 &&
+                nb.x * nb.x + nb.y * nb.y > bpR2) continue;
+            const s = clipSeg(na.x, na.y, nb.x, nb.y, clipR);
+            if (!s) continue;
+            screenSegs.push([ws(s[0], s[1]), ws(s[2], s[3])]);
+        }
+    }
+
+    ctx.strokeStyle = COL.roadBack;
+    ctx.lineWidth   = roadBackW;
+    for (const [[ax, ay], [bx, by]] of screenSegs) {
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    }
+    ctx.strokeStyle = COL.road;
+    ctx.lineWidth   = roadW;
+    for (const [[ax, ay], [bx, by]] of screenSegs) {
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    }
+
+    /* ── 3. FOV cone — always pointing up, fill + arc only (no edge lines) ── */
+    const ARC_N = 22;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    for (let i = 0; i <= ARC_N; i++)
+        ctx.lineTo(...fovPt(lerp(-halfFov, halfFov, i / ARC_N)));
+    ctx.closePath();
+    ctx.fillStyle = COL.fovFill;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(...fovPt(-halfFov));
+    for (let i = 1; i <= ARC_N; i++)
+        ctx.lineTo(...fovPt(lerp(-halfFov, halfFov, i / ARC_N)));
+    ctx.strokeStyle = COL.fovEdge;
+    ctx.lineWidth   = 1.5;
+    ctx.stroke();
+
+    /* ── 4. target ── */
+    const dotR = R * 0.042;
+    const tCol = tInFov ? COL.tgtLit : COL.tgt;
+
+    // Two staggered pulse rings — elliptical (Y compressed by cosP = ground plane pitch)
+    const PULSE_PERIOD = 1.4;
+    for (const offset of [0, PULSE_PERIOD * 0.5]) {
+        const t  = ((animT + offset) % PULSE_PERIOD) / PULSE_PERIOD;
+        const pr = dotR * (1.5 + t * 3.2);
+        ctx.beginPath();
+        ctx.ellipse(tSx, tSy, pr, pr * cosP, 0, 0, 2 * Math.PI);
+        ctx.strokeStyle = tCol;
+        ctx.lineWidth   = 2.5;
+        ctx.globalAlpha = (1 - t) * 0.65;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+    }
+
+    // Static ring
+    ctx.beginPath();
+    ctx.ellipse(tSx, tSy, dotR * 2.0, dotR * 2.0 * cosP, 0, 0, 2 * Math.PI);
+    ctx.strokeStyle = tCol;
+    ctx.lineWidth   = 2.5;
+    ctx.globalAlpha = 0.75;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Filled dot
+    ctx.beginPath();
+    ctx.ellipse(tSx, tSy, dotR, dotR * cosP, 0, 0, 2 * Math.PI);
+    ctx.fillStyle = tCol;
+    ctx.fill();
+
+    ctx.restore(); // end circle clip
+
+    /* ── 5. drone icon — projected through ts() so it lies on the tilted map plane ── */
+    // Arrow dimensions in world-space cm, scaled to stay constant screen size
+    const aFwd  =  R * 0.135 / scale;   // forward extent (North)
+    const aBack = -R * 0.047 / scale;   // rearward extent
+    const aHalf =  R * 0.068 / scale;   // half-width (East/West)
+
+    // Project vertices through the same perspective as the streets
+    const [tipX, tipY] = ts( aFwd,   0);
+    const [blX,  blY ] = ts( aBack, -aHalf);
+    const [brX,  brY ] = ts( aBack,  aHalf);
+
+    // Radial glow pad at drone origin
+    const glowGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.22);
+    glowGrad.addColorStop(0,   'rgba(60,140,255,0.30)');
+    glowGrad.addColorStop(0.5, 'rgba(60,140,255,0.12)');
+    glowGrad.addColorStop(1,   'rgba(60,140,255,0)');
+    ctx.beginPath();
+    ctx.arc(cx, cy, R * 0.22, 0, 2 * Math.PI);
+    ctx.fillStyle = glowGrad;
+    ctx.fill();
+
+    // Drop shadow
+    ctx.beginPath();
+    ctx.moveTo(tipX + 1, tipY + 2.5);
+    ctx.lineTo(blX  + 1, blY  + 2.5);
+    ctx.lineTo(brX  + 1, brY  + 2.5);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fill();
+
+    // Main arrow — gradient tip (bright) → base (dark)
+    const arrowGrad = ctx.createLinearGradient(cx, tipY, cx, blY);
+    arrowGrad.addColorStop(0,    'rgba(200,230,255,0.97)');
+    arrowGrad.addColorStop(0.38, '#55a5ff');
+    arrowGrad.addColorStop(1,    'rgba(22,58,140,0.92)');
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(blX,  blY);
+    ctx.lineTo(brX,  brY);
+    ctx.closePath();
+    ctx.fillStyle = arrowGrad;
+    ctx.fill();
+
+    // Highlight rim
+    ctx.beginPath();
+    ctx.moveTo(blX, blY);
+    ctx.lineTo(tipX, tipY);
+    ctx.lineTo(brX, brY);
+    ctx.strokeStyle = 'rgba(180,220,255,0.55)';
+    ctx.lineWidth   = 1;
+    ctx.stroke();
+
+    /* ── 6. ring border ── */
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, 2 * Math.PI);
+    ctx.strokeStyle = COL.ring;
+    ctx.lineWidth   = 3;
+    ctx.stroke();
+
+    /* ── 7. compass rose — inside the circle boundary ── */
+    const touter = R - 3;           // tick outer edge (just inside the ring border)
+    const tLg    = R * 0.07;        // cardinal tick inward length
+    const tSm    = R * 0.04;        // minor tick inward length
+    const fSz    = Math.max(9, R * 0.088);
+
+    // Cardinal labels + ticks
+    for (const [lbl, bear] of [['N', 0], ['E', 90], ['S', 180], ['W', 270]]) {
+        const a  = deg(bear - 90) - yr;
+        const dx = Math.cos(a), dy = Math.sin(a);
+        ctx.beginPath();
+        ctx.moveTo(cx + dx * touter,          cy + dy * touter);
+        ctx.lineTo(cx + dx * (touter - tLg),  cy + dy * (touter - tLg));
+        ctx.strokeStyle = COL.compass;
+        ctx.lineWidth   = 1.5;
+        ctx.stroke();
+        const lblR = touter - tLg - fSz * 0.65;
+        ctx.fillStyle    = 'rgba(255,255,255,0.90)';
+        ctx.font         = `bold ${fSz}px 'Segoe UI', sans-serif`;
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(lbl, Math.round(cx + dx * lblR), Math.round(cy + dy * lblR));
+    }
+
+    // Minor ticks
+    for (let b = 0; b < 360; b += 10) {
+        if (b % 90 === 0) continue;
+        const maj = b % 30 === 0;
+        const a   = deg(b - 90) - yr;
+        const tL  = maj ? tLg * 0.6 : tSm;
+        const dx  = Math.cos(a), dy = Math.sin(a);
+        ctx.beginPath();
+        ctx.moveTo(cx + dx * touter,         cy + dy * touter);
+        ctx.lineTo(cx + dx * (touter - tL),  cy + dy * (touter - tL));
+        ctx.strokeStyle = maj ? 'rgba(140,148,170,0.65)' : 'rgba(140,148,170,0.30)';
+        ctx.lineWidth   = 1;
+        ctx.stroke();
+    }
+
+    // Heading marker — small white triangle, fixed at 12 o'clock, pointing inward
+    const hTip  = cy - touter + 1;
+    const hBase = cy - touter + tLg * 0.95;
+    const hHalf = tSm * 0.65;
+    ctx.beginPath();
+    ctx.moveTo(cx,         hTip);
+    ctx.lineTo(cx - hHalf, hBase);
+    ctx.lineTo(cx + hHalf, hBase);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.fill();
+}
+
+/* ─── animation loop ────────────────────────────────────── */
+let prev   = 0;
+let animT  = 0;
+function frame(t) {
+    const dt = Math.min((t - prev) / 1000, 0.05);
+    prev   = t;
+    animT += dt;
+
+    if (animOn.heading) {
+        S.yawDeg = (S.yawDeg + 30 * dt) % 360;
+        const el = document.getElementById('s-yaw');
+        el.value = S.yawDeg.toFixed(1);
+        document.getElementById('v-yaw').textContent = Math.round(S.yawDeg) + '°';
+    }
+    if (animOn.target) {
+        S.tgtBear = (S.tgtBear + 20 * dt) % 360;
+        const el = document.getElementById('s-tb');
+        el.value = S.tgtBear.toFixed(1);
+        document.getElementById('v-tb').textContent = Math.round(S.tgtBear) + '°';
+    }
+
+    draw(CV.getContext('2d'), CV.width, CV.height);
+
+    document.getElementById('statusbar').textContent =
+        `ALT ${Math.round(S.altM)} m  ·  YAW ${Math.round(S.yawDeg)}°  ·  FOV ${Math.round(S.fovDeg)}°  ·  DET ${Math.round(S.detM)} m`;
+
+    requestAnimationFrame(frame);
+}
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

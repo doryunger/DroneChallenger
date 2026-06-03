@@ -9,16 +9,17 @@
 namespace
 {
 	const FColor kBgFill      {  10,  13,  20, 200 };
-	const FColor kRingBorder  {  55,  62,  90, 220 };
+	const FColor kRingBorder  {  55,  62,  90, 230 };
 	const FColor kRoadCasing  {  18,  22,  35, 255 };
 	const FColor kRoadLine    { 200, 208, 225, 255 };
 	const FColor kDroneColor  {  85, 165, 255, 255 };
-	const FColor kFrustumCol  {  85, 150, 225,  70 };
+	const FColor kFOVFill     { 100, 200, 255,  38 };
+	const FColor kFOVEdge     { 120, 220, 255, 220 };
 	const FColor kTargetColor { 255, 165,  45, 255 };
 	const FColor kCompassCol  { 140, 148, 170, 200 };
 	const FColor kHeadingCol  {  85, 165, 255, 255 };
 
-	constexpr float kPerspTilt   = 0.20f;
+	constexpr float kPerspTilt   = 0.28f;
 	constexpr int32 kCircleSegs  = 56;
 	constexpr float kRoadCasingW = 3.5f;
 	constexpr float kRoadLineW   = 1.8f;
@@ -50,11 +51,12 @@ void UDroneMiniMapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 	{
 		CachedDronePos = Drone->GetActorLocation();
 		CachedDroneYaw = Drone->GetActorRotation().Yaw;
+		CachedAltM     = CachedDronePos.Z / 100.f;
 	}
 	if (Target)
 	{
-		CachedTargetPos     = Target->GetActorLocation();
-		bCachedTargetInFOV  = Target->IsDroneInFOV();
+		CachedTargetPos    = Target->GetActorLocation();
+		bCachedTargetInFOV = Target->IsDroneInFOV();
 	}
 }
 
@@ -68,8 +70,15 @@ int32 UDroneMiniMapWidget::NativePaint(
 
 	const FVector2D Size   = AllottedGeometry.GetLocalSize();
 	const FVector2D Center = Size * 0.5f;
-	const float     R      = FMath::Min(Center.X, Center.Y) - 2.f;
-	const float     Scale  = R / MapRadiusCm;
+	const float     R      = FMath::Min(Center.X, Center.Y) - 4.f;
+
+	const float AltFactor      = FMath::Clamp(FMath::Max(CachedAltM, 10.f) / FMath::Max(ReferenceAltitudeM, 1.f), 0.15f, 6.f);
+	const float EffectiveRadius = FMath::Clamp(MapRadiusCm * AltFactor, MinMapRadiusCm, MaxMapRadiusCm);
+	const float Scale           = R / EffectiveRadius;
+
+	// Tighten clip radius so that after perspective scaling (max factor 1+kPerspTilt)
+	// no clipped endpoint can project beyond screen radius R.
+	const float ClipRadius = EffectiveRadius / (1.f + kPerspTilt) * 0.97f;
 
 	auto LocalToAbs = [&](FVector2D P) -> FVector2f
 	{
@@ -97,12 +106,46 @@ int32 UDroneMiniMapWidget::NativePaint(
 			ESlateDrawEffect::None, Col, bAA, Thick);
 	};
 
+	// 2.5D perspective: both axes scale by the same factor that varies with screen-Y,
+	// giving the map a tilted-overhead appearance. kPerspTilt applies equally to X and Y.
 	auto ToScreen = [&](float RelNorthCm, float RelEastCm) -> FVector2D
 	{
 		const float sX = RelEastCm   * Scale;
 		const float sY = -RelNorthCm * Scale;
-		const float perspFactor = 1.0f + (sY / R) * kPerspTilt;
-		return FVector2D(Center.X + sX * perspFactor, Center.Y + sY);
+		const float f  = FMath::Lerp(1.f - kPerspTilt, 1.f + kPerspTilt,
+			FMath::Clamp((sY / R + 1.f) * 0.5f, 0.f, 1.f));
+		return FVector2D(Center.X + sX * f, Center.Y + sY * f);
+	};
+
+	// Clips segment [RA, RB] (world-space relative to drone, in cm) against a circle
+	// of radius ClipRadius. Handles all cases including both endpoints outside.
+	auto ClipToCircle = [&](FVector2D RA, FVector2D RB)
+		-> TOptional<TPair<FVector2D, FVector2D>>
+	{
+		const float R2   = ClipRadius * ClipRadius;
+		const bool  bAIn = RA.SizeSquared() <= R2;
+		const bool  bBIn = RB.SizeSquared() <= R2;
+		if (bAIn && bBIn) return TPair<FVector2D, FVector2D>(RA, RB);
+
+		const FVector2D D = RB - RA;
+		const float     a = FVector2D::DotProduct(D, D);
+		if (a < KINDA_SMALL_NUMBER) return {};
+		const float b    = 2.f * FVector2D::DotProduct(RA, D);
+		const float c    = RA.SizeSquared() - R2;
+		const float disc = b * b - 4.f * a * c;
+		if (disc < 0.f) return {};
+
+		const float sq = FMath::Sqrt(disc);
+		const float t0 = (-b - sq) / (2.f * a);
+		const float t1 = (-b + sq) / (2.f * a);
+
+		if (bAIn) return TPair<FVector2D, FVector2D>(RA, RA + FMath::Clamp(t1, 0.f, 1.f) * D);
+		if (bBIn) return TPair<FVector2D, FVector2D>(RA + FMath::Clamp(t0, 0.f, 1.f) * D, RB);
+
+		// Both outside: only draw the chord if the segment transits the circle interior.
+		if (t1 < 0.f || t0 > 1.f || t0 >= t1) return {};
+		return TPair<FVector2D, FVector2D>(RA + FMath::Clamp(t0, 0.f, 1.f) * D,
+		                                   RA + FMath::Clamp(t1, 0.f, 1.f) * D);
 	};
 
 	{
@@ -127,86 +170,95 @@ int32 UDroneMiniMapWidget::NativePaint(
 	if (Target)
 	{
 		const FDroneGraph& Graph = Target->GetGraph();
+		const float BpR2 = (ClipRadius * 2.f) * (ClipRadius * 2.f);
 
 		TArray<TPair<FVector2D, FVector2D>> VisEdges;
 		for (const auto& [NodeId, Neighbors] : Graph.Adjacency)
 		{
 			const FVector* PosA = Graph.NodeWorldPos.Find(NodeId);
 			if (!PosA) continue;
-			const float DistA = FVector2D::Distance(
-				FVector2D(PosA->X, PosA->Y),
-				FVector2D(CachedDronePos.X, CachedDronePos.Y));
-			if (DistA > MapRadiusCm * 1.35f) continue;
-
-			const FVector2D SA = ToScreen(PosA->X - CachedDronePos.X, PosA->Y - CachedDronePos.Y);
+			const FVector2D RelA(PosA->X - CachedDronePos.X, PosA->Y - CachedDronePos.Y);
 
 			for (int32 NeighId : Neighbors)
 			{
 				if (NeighId <= NodeId) continue;
 				const FVector* PosB = Graph.NodeWorldPos.Find(NeighId);
 				if (!PosB) continue;
-				const float DistB = FVector2D::Distance(
-					FVector2D(PosB->X, PosB->Y),
-					FVector2D(CachedDronePos.X, CachedDronePos.Y));
-				if (DistB > MapRadiusCm * 1.35f) continue;
+				const FVector2D RelB(PosB->X - CachedDronePos.X, PosB->Y - CachedDronePos.Y);
 
-				const FVector2D SB = ToScreen(PosB->X - CachedDronePos.X, PosB->Y - CachedDronePos.Y);
-				VisEdges.Add({ SA, SB });
+				// Broad-phase: skip only if both endpoints are clearly out of range.
+				if (RelA.SizeSquared() > BpR2 && RelB.SizeSquared() > BpR2) continue;
+
+				auto Seg = ClipToCircle(RelA, RelB);
+				if (!Seg) continue;
+
+				VisEdges.Add({
+					ToScreen(Seg->Key.X,   Seg->Key.Y),
+					ToScreen(Seg->Value.X, Seg->Value.Y) });
 			}
 		}
 
 		for (const auto& [A, B] : VisEdges)
 			MakeLines({ A, B }, FLinearColor(kRoadCasing), kRoadCasingW, false);
-
 		for (const auto& [A, B] : VisEdges)
-			MakeLines({ A, B }, FLinearColor(kRoadLine), kRoadLineW, false);
+			MakeLines({ A, B }, FLinearColor(kRoadLine),   kRoadLineW,   false);
 	}
 
 	{
-		const float HeadRad  = FMath::DegreesToRadians(CachedDroneYaw - 90.f);
+		// FOV cone — built from world-space forward/right vectors for correct orientation.
+		const FVector FwdWorld = Drone ? Drone->GetActorForwardVector() : FVector(1, 0, 0);
+		const FVector RgtWorld = Drone ? Drone->GetActorRightVector()   : FVector(0, 1, 0);
 		const float HalfFOV  = FMath::DegreesToRadians(FPVHorizontalFOVDeg * 0.5f);
-		const float FrustLen = DetectionRangeCm * Scale;
-		const float LeftAng  = HeadRad - HalfFOV;
-		const float RightAng = HeadRad + HalfFOV;
+		const float FrustLen = FMath::Min(DetectionRangeCm, ClipRadius * 0.95f);
 
-		auto FrustumPt = [&](float Ang, float Len) -> FVector2D
+		auto FovPt = [&](float SignedAngle) -> FVector2D
 		{
-			const float sX = FMath::Cos(Ang) * Len;
-			const float sY = FMath::Sin(Ang) * Len;
-			const float pf = 1.0f + (sY / R) * kPerspTilt;
-			return FVector2D(Center.X + sX * pf, Center.Y + sY);
+			const float CosA = FMath::Cos(SignedAngle);
+			const float SinA = FMath::Sin(SignedAngle);
+			return ToScreen((FwdWorld.X * CosA + RgtWorld.X * SinA) * FrustLen,
+			                (FwdWorld.Y * CosA + RgtWorld.Y * SinA) * FrustLen);
 		};
 
-		const FVector2D LeftEnd  = FrustumPt(LeftAng,  FrustLen);
-		const FVector2D RightEnd = FrustumPt(RightAng, FrustLen);
+		constexpr int32 kFovSegs = 18;
 
-		MakeLines({ Center, LeftEnd  }, FLinearColor(kFrustumCol), 1.2f);
-		MakeLines({ Center, RightEnd }, FLinearColor(kFrustumCol), 1.2f);
-
-		constexpr int32 kArcN = 14;
-		TArray<FVector2D> FrustArc;
-		FrustArc.Reserve(kArcN + 1);
-		for (int32 i = 0; i <= kArcN; ++i)
+		TArray<FSlateVertex> FovV;
+		TArray<SlateIndex>   FovI;
+		AddAbsVert(FovV, Center.X, Center.Y, kFOVFill);
+		for (int32 i = 0; i <= kFovSegs; ++i)
 		{
-			const float A = FMath::Lerp(LeftAng, RightAng, (float)i / kArcN);
-			FrustArc.Add(FrustumPt(A, FrustLen));
+			const FVector2D P = FovPt(FMath::Lerp(-HalfFOV, HalfFOV, (float)i / kFovSegs));
+			AddAbsVert(FovV, P.X, P.Y, kFOVFill);
 		}
-		MakeLines(FrustArc, FLinearColor(kFrustumCol), 1.2f);
+		for (int32 i = 0; i < kFovSegs; ++i)
+		{
+			FovI.Add(0);
+			FovI.Add((SlateIndex)(i + 1));
+			FovI.Add((SlateIndex)(i + 2));
+		}
+		FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId,
+			GetFillHandle(), FovV, FovI, nullptr, 0, 0);
+
+		const FVector2D FovLeft  = FovPt(-HalfFOV);
+		const FVector2D FovRight = FovPt( HalfFOV);
+		MakeLines({ Center, FovLeft  }, FLinearColor(kFOVEdge), 1.5f);
+		MakeLines({ Center, FovRight }, FLinearColor(kFOVEdge), 1.5f);
+
+		TArray<FVector2D> FovArc;
+		FovArc.Reserve(kFovSegs + 1);
+		for (int32 i = 0; i <= kFovSegs; ++i)
+			FovArc.Add(FovPt(FMath::Lerp(-HalfFOV, HalfFOV, (float)i / kFovSegs)));
+		MakeLines(FovArc, FLinearColor(kFOVEdge), 1.5f);
 	}
 
 	if (Target)
 	{
-		const FVector2D TgtScreen = ToScreen(
-			CachedTargetPos.X - CachedDronePos.X,
-			CachedTargetPos.Y - CachedDronePos.Y);
-		const float DistPx = FVector2D::Distance(TgtScreen, Center);
-
-		if (DistPx <= R * 1.05f)
+		const FVector2D TgtRel(CachedTargetPos.X - CachedDronePos.X,
+			                   CachedTargetPos.Y - CachedDronePos.Y);
+		if (TgtRel.SizeSquared() <= ClipRadius * ClipRadius)
 		{
+			const FVector2D TgtScreen = ToScreen(TgtRel.X, TgtRel.Y);
 			const float DotR = R * 0.045f;
-			const FColor TgtCol = bCachedTargetInFOV
-				? FColor(255, 230, 80, 255)
-				: kTargetColor;
+			const FColor TgtCol = bCachedTargetInFOV ? FColor(255, 230, 80, 255) : kTargetColor;
 
 			TArray<FSlateVertex> TV;
 			TArray<SlateIndex>   TI;
@@ -228,7 +280,6 @@ int32 UDroneMiniMapWidget::NativePaint(
 				GetFillHandle(), TV, TI, nullptr, 0, 0);
 
 			TArray<FVector2D> Ring;
-			Ring.Reserve(kDotN + 1);
 			for (int32 i = 0; i <= kDotN; ++i)
 			{
 				const float A = 2.f * PI * i / kDotN;
@@ -240,16 +291,14 @@ int32 UDroneMiniMapWidget::NativePaint(
 	}
 
 	{
-		const float HeadRad = FMath::DegreesToRadians(CachedDroneYaw - 90.f);
-		const FVector2D Fwd (FMath::Cos(HeadRad),  FMath::Sin(HeadRad));
-		const FVector2D Perp(-FMath::Sin(HeadRad), FMath::Cos(HeadRad));
-
+		const float HeadRad  = FMath::DegreesToRadians(CachedDroneYaw - 90.f);
+		const FVector2D Fwd ( FMath::Cos(HeadRad),  FMath::Sin(HeadRad));
+		const FVector2D Perp(-FMath::Sin(HeadRad),  FMath::Cos(HeadRad));
 		const float ArrowLen  = R * 0.13f;
 		const float ArrowHalf = R * 0.065f;
-
-		const FVector2D ATip = Center + Fwd * ArrowLen;
-		const FVector2D ABL  = Center - Fwd * ArrowLen * 0.35f + Perp * ArrowHalf;
-		const FVector2D ABR  = Center - Fwd * ArrowLen * 0.35f - Perp * ArrowHalf;
+		const FVector2D ATip = Center + Fwd  * ArrowLen;
+		const FVector2D ABL  = Center - Fwd  * ArrowLen * 0.35f + Perp * ArrowHalf;
+		const FVector2D ABR  = Center - Fwd  * ArrowLen * 0.35f - Perp * ArrowHalf;
 
 		TArray<FSlateVertex> AV;
 		TArray<SlateIndex>   AI;
@@ -265,22 +314,20 @@ int32 UDroneMiniMapWidget::NativePaint(
 
 	{
 		TArray<FVector2D> MapEdge;
-		MapEdge.Reserve(kCircleSegs + 1);
 		for (int32 i = 0; i <= kCircleSegs; ++i)
 		{
 			const float A = 2.f * PI * i / kCircleSegs;
 			MapEdge.Add(FVector2D(Center.X + R * FMath::Cos(A), Center.Y + R * FMath::Sin(A)));
 		}
-		MakeLines(MapEdge, FLinearColor(kRingBorder), 2.f);
+		MakeLines(MapEdge, FLinearColor(kRingBorder), 3.f);
 	}
 
 	{
-		const float CompassR    = R + R * 0.10f;
-		const float TickLenLg   = R * 0.09f;
-		const float TickLenSm   = R * 0.05f;
+		const float CompassR  = R + R * 0.10f;
+		const float TickLenLg = R * 0.09f;
+		const float TickLenSm = R * 0.05f;
 
 		TArray<FVector2D> CompassRing;
-		CompassRing.Reserve(kCircleSegs + 1);
 		for (int32 i = 0; i <= kCircleSegs; ++i)
 		{
 			const float A = 2.f * PI * i / kCircleSegs;
@@ -290,20 +337,17 @@ int32 UDroneMiniMapWidget::NativePaint(
 		MakeLines(CompassRing, FLinearColor(kRingBorder) * 0.7f, 1.f);
 
 		const TArray<TPair<FString, float>> Cardinals = {
-			{ TEXT("N"),   0.f },
-			{ TEXT("E"),  90.f },
-			{ TEXT("S"), 180.f },
-			{ TEXT("W"), 270.f },
+			{ TEXT("N"),   0.f }, { TEXT("E"),  90.f },
+			{ TEXT("S"), 180.f }, { TEXT("W"), 270.f },
 		};
 		for (const auto& [Label, Bearing] : Cardinals)
 		{
-			const float A = FMath::DegreesToRadians(Bearing - 90.f);
+			const float A   = FMath::DegreesToRadians(Bearing - 90.f);
 			const FVector2D Dir(FMath::Cos(A), FMath::Sin(A));
-			const FVector2D Outer = Center + Dir * CompassR;
-			const FVector2D Inner = Center + Dir * (CompassR - TickLenLg);
-			MakeLines({ Inner, Outer }, FLinearColor(kCompassCol), 1.5f);
+			MakeLines({ Center + Dir * (CompassR - TickLenLg), Center + Dir * CompassR },
+				FLinearColor(kCompassCol), 1.5f);
 
-			const FVector2D TextPos = Outer + Dir * 5.f - FVector2D(5.5f, 6.f);
+			const FVector2D TextPos = Center + Dir * (CompassR + 5.f) - FVector2D(5.5f, 6.f);
 			FSlateDrawElement::MakeText(OutDrawElements, LayerId,
 				AllottedGeometry.ToPaintGeometry(
 					FVector2f(13.f, 13.f),
@@ -315,31 +359,26 @@ int32 UDroneMiniMapWidget::NativePaint(
 
 		for (float Bearing = 0.f; Bearing < 360.f; Bearing += 10.f)
 		{
-			const bool bCardinal = FMath::Abs(FMath::Fmod(Bearing, 90.f)) < 0.1f;
-			if (bCardinal) continue;
-			const float A = FMath::DegreesToRadians(Bearing - 90.f);
+			if (FMath::Abs(FMath::Fmod(Bearing, 90.f)) < 0.1f) continue;
+			const float A    = FMath::DegreesToRadians(Bearing - 90.f);
+			const bool bMaj  = FMath::Abs(FMath::Fmod(Bearing, 30.f)) < 0.1f;
+			const float TLen = bMaj ? TickLenLg * 0.7f : TickLenSm;
 			const FVector2D Dir(FMath::Cos(A), FMath::Sin(A));
-			const bool bMajor = FMath::Abs(FMath::Fmod(Bearing, 30.f)) < 0.1f;
-			const float TLen = bMajor ? TickLenLg * 0.7f : TickLenSm;
-			MakeLines({
-				Center + Dir * (CompassR - TLen),
-				Center + Dir *  CompassR },
-				FLinearColor(kCompassCol) * (bMajor ? 1.f : 0.6f), 1.f);
+			MakeLines({ Center + Dir * (CompassR - TLen), Center + Dir * CompassR },
+				FLinearColor(kCompassCol) * (bMaj ? 1.f : 0.6f), 1.f);
 		}
 
-		const float HeadA = FMath::DegreesToRadians(CachedDroneYaw - 90.f);
-		const FVector2D HD(FMath::Cos(HeadA), FMath::Sin(HeadA));
-		const FVector2D HPerp(-HD.Y, HD.X);
-		const float     HBase   = CompassR - TickLenLg * 1.2f;
-		const FVector2D HTip    = Center + HD * (CompassR + 2.f);
-		const FVector2D HBL     = Center + HD * HBase + HPerp * TickLenSm;
-		const FVector2D HBR     = Center + HD * HBase - HPerp * TickLenSm;
+		const float     HeadA  = FMath::DegreesToRadians(CachedDroneYaw - 90.f);
+		const FVector2D HD (FMath::Cos(HeadA),  FMath::Sin(HeadA));
+		const FVector2D HP (-HD.Y, HD.X);
+		const FVector2D HTip   = Center + HD * (CompassR + 2.f);
+		const FVector2D HBase  = Center + HD * (CompassR - TickLenLg * 1.2f);
 
 		TArray<FSlateVertex> HV;
 		TArray<SlateIndex>   HI;
-		AddAbsVert(HV, HTip.X, HTip.Y, kHeadingCol);
-		AddAbsVert(HV, HBL.X,  HBL.Y,  kHeadingCol);
-		AddAbsVert(HV, HBR.X,  HBR.Y,  kHeadingCol);
+		AddAbsVert(HV, HTip.X,              HTip.Y,              kHeadingCol);
+		AddAbsVert(HV, (HBase + HP * TickLenSm).X, (HBase + HP * TickLenSm).Y, kHeadingCol);
+		AddAbsVert(HV, (HBase - HP * TickLenSm).X, (HBase - HP * TickLenSm).Y, kHeadingCol);
 		HI = { 0, 1, 2 };
 		FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId,
 			GetFillHandle(), HV, HI, nullptr, 0, 0);
