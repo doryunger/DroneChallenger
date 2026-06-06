@@ -44,8 +44,11 @@ void ADroneHUD::BeginPlay()
         {
             MiniMapWidget->Init(Drone, Target);
             MiniMapWidget->AddToViewport();
-            MiniMapWidget->SetDesiredSizeInViewport(FVector2D(240.f, 240.f));
-            MiniMapWidget->SetPositionInViewport(FVector2D(VP.X - 260.f, 20.f));
+            constexpr float kMiniMapSize   = 320.f;
+            constexpr float kMiniMapMargin =  20.f;
+            MiniMapWidget->SetDesiredSizeInViewport(FVector2D(kMiniMapSize, kMiniMapSize));
+            MiniMapWidget->SetPositionInViewport(FVector2D(VP.X - kMiniMapSize - kMiniMapMargin,
+                                                            VP.Y - kMiniMapSize - kMiniMapMargin));
         }
     }
 
