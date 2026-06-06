@@ -212,10 +212,10 @@ canvas {
 
   <main class="preview">
     <div class="canvas-wrap">
-      <canvas id="cv" width="400" height="400"></canvas>
+      <canvas id="cv" width="420" height="420"></canvas>
       <div class="size-row">
-        <button class="size-btn" onclick="setSize(240)">240 × 240 (game)</button>
-        <button class="size-btn active" onclick="setSize(400)">400 × 400 (studio)</button>
+        <button class="size-btn" onclick="setSize(252)">252 × 252 (game)</button>
+        <button class="size-btn active" onclick="setSize(420)">420 × 420 (studio)</button>
       </div>
     </div>
     <div class="statusbar" id="statusbar">ALT 100 m · YAW 0° · FOV 90°</div>
@@ -228,8 +228,8 @@ canvas {
 'use strict';
 
 /* ─── constants ──────────────────────────────────────────── */
-const ROAD_BACK_MIN = 6;   const ROAD_BACK_MAX = 22;
-const ROAD_MIN      = 3.5; const ROAD_MAX      = 13;
+const ROAD_BACK_MIN = 2.5; const ROAD_BACK_MAX = 9;
+const ROAD_MIN      = 1.2; const ROAD_MAX      = 5;
 
 /* ─── colours ────────────────────────────────────────────── */
 const COL = {
@@ -248,10 +248,14 @@ const COL = {
 /* ─── real road graph (Marienplatz Munich, from nodes.csv / edges.csv) ── */
 const ROADS = (function buildFromCsvData() {
     const nodes = {}, adj = {};
+    let minElev = Infinity, maxElev = -Infinity;
     for (const [id, pos] of Object.entries(GRAPH_NODES)) {
         const nid = +id;
-        nodes[nid] = { x: pos[0], y: pos[1] };
-        adj[nid]   = [];
+        const z   = pos[2] !== undefined ? pos[2] : 0;
+        nodes[nid] = { x: pos[0], y: pos[1], z };
+        if (z < minElev) minElev = z;
+        if (z > maxElev) maxElev = z;
+        adj[nid] = [];
     }
     for (const [a, b] of GRAPH_EDGES) {
         if (adj[a] && adj[b]) {
@@ -259,7 +263,9 @@ const ROADS = (function buildFromCsvData() {
             adj[b].push(a);
         }
     }
-    return { nodes, adj };
+    const elevRange = maxElev - minElev;
+    const refElev   = (minElev + maxElev) / 2;
+    return { nodes, adj, minElev, maxElev, elevRange, refElev };
 })();
 
 /* ─── state ─────────────────────────────────────────────── */
@@ -309,14 +315,14 @@ const lerp  = (a, b, t) => a + (b - a) * t;
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const deg   = d => d * Math.PI / 180;
 
-/* ─── world-space segment clip ──────────────────────────── */
-function clipSeg(ax, ay, bx, by, clipR) {
+/* ─── world-space segment clip (with z interpolation) ───── */
+function clipSeg(ax, ay, az, bx, by, bz, clipR) {
     const R2  = clipR * clipR;
     const aIn = ax * ax + ay * ay <= R2;
     const bIn = bx * bx + by * by <= R2;
-    if (aIn && bIn) return [ax, ay, bx, by];
+    if (aIn && bIn) return [ax, ay, az, bx, by, bz];
 
-    const dx = bx - ax, dy = by - ay;
+    const dx = bx - ax, dy = by - ay, dz = bz - az;
     const a  = dx * dx + dy * dy;
     if (a < 1e-8) return null;
     const b    = 2 * (ax * dx + ay * dy);
@@ -329,12 +335,13 @@ function clipSeg(ax, ay, bx, by, clipR) {
     const t1 = (-b + sq) / (2 * a);
     const px  = t => ax + t * dx;
     const py  = t => ay + t * dy;
+    const pz  = t => az + t * dz;
 
-    if (aIn) { const t = clamp(t1, 0, 1); return [ax, ay, px(t), py(t)]; }
-    if (bIn) { const t = clamp(t0, 0, 1); return [px(t), py(t), bx, by]; }
+    if (aIn) { const t = clamp(t1, 0, 1); return [ax, ay, az, px(t), py(t), pz(t)]; }
+    if (bIn) { const t = clamp(t0, 0, 1); return [px(t), py(t), pz(t), bx, by, bz]; }
     if (t1 < 0 || t0 > 1 || t0 >= t1) return null;
-    return [px(clamp(t0, 0, 1)), py(clamp(t0, 0, 1)),
-            px(clamp(t1, 0, 1)), py(clamp(t1, 0, 1))];
+    return [px(clamp(t0,0,1)), py(clamp(t0,0,1)), pz(clamp(t0,0,1)),
+            px(clamp(t1,0,1)), py(clamp(t1,0,1)), pz(clamp(t1,0,1))];
 }
 
 /* ─── minimap renderer ──────────────────────────────────── */
@@ -363,16 +370,57 @@ function draw(ctx, W, H) {
      * Result: N-S road lines converge toward a vanishing point at the top;
      *         E-W lines stay horizontal but compress with distance.
      */
-    const pitch    = 0.70;                // camera tilt from vertical (~40°)
+    const PITCH_MAX  = 0.50;   // tilt at low altitude  (~29°)
+    const PITCH_MIN  = 0.05;   // tilt at high altitude (~3°, near top-down)
+    const ALT_LOW    = 30;     // m — full tilt below this
+    const ALT_HIGH   = 300;    // m — near flat above this
+    const tAlt       = Math.max(0, Math.min(1, (S.altM - ALT_LOW) / (ALT_HIGH - ALT_LOW)));
+    const tSmooth    = tAlt * tAlt * (3 - 2 * tAlt);   // smoothstep
+    const pitch      = lerp(PITCH_MAX, PITCH_MIN, tSmooth);
     const focal    = R * 0.9;             // focal length — controls perspective strength
     const sinP     = Math.sin(pitch);
     const cosP     = Math.cos(pitch);
 
-    function ts(relN, relE) {
+    /*
+     * z is elevation in the same cm units as x/y. Higher ground shifts the
+     * screen point slightly upward. The scale factor (0.12) keeps the effect
+     * subtle — an 80 m terrain range causes ~4 px of vertical relief.
+     */
+    /*
+     * Adaptive elevation scale.
+     * For terrain ranges below 50 m, amplify so they always render
+     * with the same visual relief as a 50 m range would.
+     * For ranges above 50 m, use natural scale (no exaggeration).
+     * The amplification factor equals (50 / actualRange), which is exactly
+     * cancelled by the proportionally smaller absolute z-offsets, so the peak
+     * node always shifts by the same number of pixels regardless of how flat
+     * the terrain is — making subtle changes legible without distorting large ones.
+     */
+    /*
+     * Power-law altitude amplification.
+     * For ranges < 50 m: effectiveM = actualM^0.6 × 50^0.4
+     *   → 1 m looks like ~4.6 m, 5 m looks like ~14 m, 33 m looks like ~40 m
+     * For ranges ≥ 50 m: 1× exactly — 100 m stays 100 m, no suppression.
+     * ELEV_EXP controls the curve (lower = more boost for tiny ranges).
+     * Z_BASE is the overall visual intensity; tune this to taste.
+     */
+    const ELEV_REF_M  = 50;
+    const ELEV_EXP    = 0.6;
+    const Z_BASE      = 0.7;
+    const elevRangeM  = Math.max(ROADS.elevRange / 100, 0.1);
+    const effectiveM  = elevRangeM < ELEV_REF_M
+        ? Math.pow(elevRangeM, ELEV_EXP) * Math.pow(ELEV_REF_M, 1 - ELEV_EXP)
+        : elevRangeM;
+    const zNormScale  = ROADS.elevRange > 0 ? (effectiveM / elevRangeM) * Z_BASE : 0;
+
+    function ts(relN, relE, relZ) {
         const sX = relE * scale;
         const sN = relN * scale;          // positive = ahead (forward)
         const k  = focal / (focal + sN * sinP);
-        return [cx + sX * k, cy - sN * cosP * k];
+        const zShift = relZ !== undefined
+            ? (relZ - ROADS.refElev) * scale * zNormScale
+            : 0;
+        return [cx + sX * k, cy - sN * cosP * k - zShift];
     }
 
     /*
@@ -384,10 +432,12 @@ function draw(ctx, W, H) {
      */
     const yr   = deg(S.yawDeg);
     const cosY = Math.cos(yr), sinY = Math.sin(yr);
-    function ws(relN, relE) {
+    function ws(relN, relE, relZ) {
         return ts(relN * cosY + relE * sinY,
-                 -relN * sinY + relE * cosY);
+                 -relN * sinY + relE * cosY,
+                 relZ);
     }
+
 
     /* FOV: scales with altitude, always centred on screen-up (drone forward) */
     const frustLen = Math.min(detRangCm, clipR * 0.95);
@@ -420,7 +470,8 @@ function draw(ctx, W, H) {
 
     /* ── 2. roads (heading-up: use ws() for all world points) ── */
     const bpR2 = (clipR * 2) ** 2;
-    ctx.lineCap = ctx.lineJoin = 'round';
+    ctx.lineCap  = 'butt';
+    ctx.lineJoin = 'round';
 
     const screenSegs = [];
     for (const [id, nbrs] of Object.entries(ROADS.adj)) {
@@ -430,17 +481,20 @@ function draw(ctx, W, H) {
             const nb = ROADS.nodes[nb_id];
             if (na.x * na.x + na.y * na.y > bpR2 &&
                 nb.x * nb.x + nb.y * nb.y > bpR2) continue;
-            const s = clipSeg(na.x, na.y, nb.x, nb.y, clipR);
+            const s = clipSeg(na.x, na.y, na.z, nb.x, nb.y, nb.z, clipR);
             if (!s) continue;
-            screenSegs.push([ws(s[0], s[1]), ws(s[2], s[3])]);
+            screenSegs.push([ws(s[0], s[1], s[2]), ws(s[3], s[4], s[5]), s[2], s[5]]);
         }
     }
 
+    ctx.shadowColor = 'rgba(160,165,185,0.28)';
+    ctx.shadowBlur  = roadBackW * 2.5;
     ctx.strokeStyle = COL.roadBack;
     ctx.lineWidth   = roadBackW;
     for (const [[ax, ay], [bx, by]] of screenSegs) {
         ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
     }
+    ctx.shadowBlur  = 0;
     ctx.strokeStyle = COL.road;
     ctx.lineWidth   = roadW;
     for (const [[ax, ay], [bx, by]] of screenSegs) {
