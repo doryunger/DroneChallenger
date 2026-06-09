@@ -1,13 +1,13 @@
 #include "DroneHUD.h"
 #include "BTDisplayWidget.h"
 #include "DroneTrackingWidget.h"
-#include "DroneMiniMapWidget.h"
 #include "DronePFDWidget.h"
 #include "DroneCrosshairWidget.h"
 #include "DroneActor.h"
 #include "TargetPawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/GameViewportClient.h"
+#include "MiniMapWidget.h"
 
 void ADroneHUD::BeginPlay()
 {
@@ -37,18 +37,22 @@ void ADroneHUD::BeginPlay()
         }
     }
 
-    if (MiniMapWidgetClass)
+    const float mmMargin   = FMath::Min(VP.X, VP.Y) * 0.018f;
+    const float mmSize     = FMath::Min(VP.X * 0.32f, VP.Y * 0.52f);
+    const float bottomEdge = VP.Y - mmMargin;
+
     {
-        MiniMapWidget = CreateWidget<UDroneMiniMapWidget>(GetWorld(), MiniMapWidgetClass);
-        if (MiniMapWidget)
+        MiniMapBrowser = CreateWidget<UMiniMapWidget>(GetWorld(), UMiniMapWidget::StaticClass());
+        if (MiniMapBrowser)
         {
-            MiniMapWidget->Init(Drone, Target);
-            MiniMapWidget->AddToViewport();
-            constexpr float kMiniMapSize   = 320.f;
-            constexpr float kMiniMapMargin =  20.f;
-            MiniMapWidget->SetDesiredSizeInViewport(FVector2D(kMiniMapSize, kMiniMapSize));
-            MiniMapWidget->SetPositionInViewport(FVector2D(VP.X - kMiniMapSize - kMiniMapMargin,
-                                                            VP.Y - kMiniMapSize - kMiniMapMargin));
+            MiniMapBrowser->AddToViewport();
+            MiniMapBrowser->SetDesiredSizeInViewport(FVector2D(mmSize, mmSize));
+            MiniMapBrowser->SetPositionInViewport(FVector2D(mmMargin, bottomEdge - mmSize));
+
+            FString HtmlPath = FPaths::ConvertRelativePathToFull(
+                FPaths::ProjectDir() / TEXT("HUD/minimap/minimap.html"));
+            HtmlPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+            MiniMapBrowser->LoadURL(TEXT("file:///") + HtmlPath);
         }
     }
 
@@ -59,9 +63,14 @@ void ADroneHUD::BeginPlay()
         {
             PFDWidget->Init(Drone);
             PFDWidget->AddToViewport();
-            PFDWidget->SetDesiredSizeInViewport(FVector2D(VP.X * 0.22f, VP.Y * 0.28f));
-            PFDWidget->SetPositionInViewport(
-                FVector2D((VP.X - VP.X * 0.22f) * 0.5f, VP.Y * 0.62f));
+            const float pfdW         = VP.X * 0.32f;
+            const float pfdH         = VP.Y * 0.42f;
+            const float R_pfd        = FMath::Min(pfdW * 0.32f, pfdH * 0.44f);
+            const float pfdCircleBot = pfdH / 2.f + R_pfd;
+            PFDWidget->SetDesiredSizeInViewport(FVector2D(pfdW, pfdH));
+            PFDWidget->SetPositionInViewport(FVector2D(
+                (VP.X - pfdW) * 0.5f,
+                bottomEdge - pfdCircleBot));
         }
     }
 
@@ -74,4 +83,8 @@ void ADroneHUD::BeginPlay()
             CrosshairWidget->AddToViewport();
         }
     }
+}
+
+void ADroneHUD::NotifyHUDServerReady()
+{
 }

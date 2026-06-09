@@ -27,35 +27,49 @@ header {
     border-bottom: 1px solid #1e2535;
     flex-shrink: 0;
 }
-.brand  { font-size: 13px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: #5599ff; }
+.brand   { font-size: 13px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: #5599ff; }
 .project { font-size: 11px; color: #3a4a68; letter-spacing: 1px; }
-.nav { margin-left: auto; display: flex; gap: 4px; }
-.nav-btn {
-    background: none; border: 1px solid #1e2535; color: #5a6a88;
-    padding: 4px 14px; border-radius: 4px; cursor: pointer;
-    font-size: 11px; letter-spacing: 0.5px; transition: all 0.15s;
-}
-.nav-btn:hover  { border-color: #2a3a55; color: #8899bb; }
-.nav-btn.active { background: #0e1a2e; border-color: #2a4a8a; color: #6699cc; }
 
-.workspace {
+/* ── Tab bar ── */
+.tab-bar {
     display: flex;
-    flex: 1;
-    overflow: hidden;
+    background: #0e1117;
+    border-bottom: 1px solid #161d2a;
+    flex-shrink: 0;
+    padding: 0 16px;
+    gap: 2px;
 }
+.tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #4a5a78;
+    padding: 8px 18px;
+    cursor: pointer;
+    font-size: 11px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    font-weight: 600;
+    transition: all 0.15s;
+    margin-bottom: -1px;
+}
+.tab:hover  { color: #7a8fab; border-bottom-color: #2a3a55; }
+.tab.active { color: #5599ff; border-bottom-color: #3a7aee; }
+
+.workspace { display: flex; flex: 1; overflow: hidden; }
 
 /* ── Controls panel ── */
 .controls {
-    width: 250px;
-    flex-shrink: 0;
+    width: 250px; flex-shrink: 0;
     background: #0e1117;
     border-right: 1px solid #161d2a;
     overflow-y: auto;
     padding: 14px 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
+    display: flex; flex-direction: column; gap: 0;
 }
+.tab-controls { display: flex; flex-direction: column; gap: 18px; }
+.hidden { display: none !important; }
+
 .section-title {
     font-size: 9px; font-weight: 700; letter-spacing: 2.5px;
     text-transform: uppercase; color: #2a5a9a;
@@ -102,6 +116,14 @@ input[type=range]::-webkit-slider-thumb:hover { background: #5599ff; }
 }
 .track.on .thumb { left: 16px; background: #5599ff; }
 
+.hud-tip {
+    background: #0a1020; border: 1px solid #1a2a44;
+    border-radius: 5px; padding: 10px 11px;
+    color: #4a6080; font-size: 10px; line-height: 1.6;
+    margin-bottom: 14px;
+}
+.hud-tip strong { color: #5a80aa; }
+
 /* ── Preview ── */
 .preview {
     flex: 1; display: flex; flex-direction: column;
@@ -117,11 +139,7 @@ input[type=range]::-webkit-slider-thumb:hover { background: #5599ff; }
     background-size: 40px 40px;
 }
 .canvas-wrap { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-canvas {
-    display: block;
-    box-shadow: 0 0 0 1px #111a2a, 0 8px 40px rgba(20,50,120,0.25);
-    background: transparent;
-}
+canvas { display: block; box-shadow: 0 0 0 1px #111a2a, 0 8px 40px rgba(20,50,120,0.25); background: transparent; }
 .size-row { display: flex; gap: 5px; }
 .size-btn {
     background: none; border: 1px solid #161e2e; color: #4a5a78;
@@ -131,10 +149,17 @@ canvas {
 .size-btn:hover  { border-color: #2a3a55; color: #7a8aa8; }
 .size-btn.active { border-color: #1e3a6a; color: #5588cc; background: #0a1222; }
 
+/* Full HUD fills the whole preview */
+.fullhud-wrap {
+    position: absolute; inset: 0; z-index: 1;
+    display: flex; align-items: center; justify-content: center;
+}
+.fullhud-wrap canvas { max-width: 100%; max-height: 100%; }
+
 .statusbar {
     position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
     font-family: 'Consolas', monospace; font-size: 10px;
-    color: #2a3a58; letter-spacing: 1px; white-space: nowrap;
+    color: #2a3a58; letter-spacing: 1px; white-space: nowrap; z-index: 2;
 }
 </style>
 </head>
@@ -143,95 +168,202 @@ canvas {
 <header>
   <span class="brand">HUD Studio</span>
   <span class="project">/ DroneChallenger</span>
-  <div class="nav">
-    <button class="nav-btn active">MiniMap</button>
-  </div>
 </header>
+
+<div class="tab-bar">
+  <button class="tab active" data-tab="minimap">MiniMap</button>
+  <button class="tab"        data-tab="pfd">PFD</button>
+  <button class="tab"        data-tab="crosshair">Crosshair</button>
+  <button class="tab"        data-tab="fullhud">Full HUD</button>
+</div>
 
 <div class="workspace">
 
   <aside class="controls">
 
-    <div>
-      <div class="section-title">Drone</div>
-      <div class="ctrl-row">
-        <div class="ctrl-label">Altitude <span class="ctrl-value" id="v-alt">100 m</span></div>
-        <input type="range" id="s-alt" min="10" max="400" value="100" step="1">
+    <!-- ── MiniMap controls ── -->
+    <div class="tab-controls" data-for="minimap">
+      <div>
+        <div class="section-title">Drone</div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">Altitude <span class="ctrl-value" id="v-alt">100 m</span></div>
+          <input type="range" id="s-alt" min="10" max="400" value="100" step="1">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">Heading <span class="ctrl-value" id="v-yaw">0°</span></div>
+          <input type="range" id="s-yaw" min="0" max="359" value="0" step="1">
+        </div>
+        <div class="toggle-row" onclick="toggleAnim('heading')">
+          <div class="track" id="t-heading"><div class="thumb"></div></div>
+          Auto-rotate heading
+        </div>
       </div>
-      <div class="ctrl-row">
-        <div class="ctrl-label">Heading <span class="ctrl-value" id="v-yaw">0°</span></div>
-        <input type="range" id="s-yaw" min="0" max="359" value="0" step="1">
+      <div>
+        <div class="section-title">Map</div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">Map Radius <span class="ctrl-value" id="v-mrad">500 m</span></div>
+          <input type="range" id="s-mrad" min="100" max="2000" value="500" step="10">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">Ref Altitude <span class="ctrl-value" id="v-ralt">100 m</span></div>
+          <input type="range" id="s-ralt" min="20" max="300" value="100" step="5">
+        </div>
       </div>
-      <div class="toggle-row" onclick="toggleAnim('heading')">
-        <div class="track" id="t-heading"><div class="thumb"></div></div>
-        Auto-rotate heading
+      <div>
+        <div class="section-title">FOV Cone</div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">FOV Angle <span class="ctrl-value" id="v-fov">90°</span></div>
+          <input type="range" id="s-fov" min="15" max="150" value="90" step="1">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">Det. Range <span class="ctrl-value" id="v-det">500 m</span></div>
+          <input type="range" id="s-det" min="30" max="800" value="500" step="10">
+        </div>
+      </div>
+      <div>
+        <div class="section-title">Target</div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">Bearing <span class="ctrl-value" id="v-tb">45°</span></div>
+          <input type="range" id="s-tb" min="0" max="359" value="45" step="1">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">Range <span class="ctrl-value" id="v-tr">40%</span></div>
+          <input type="range" id="s-tr" min="0" max="100" value="40" step="1">
+        </div>
+        <div class="toggle-row" onclick="toggleAnim('target')">
+          <div class="track" id="t-target"><div class="thumb"></div></div>
+          Auto-orbit target
+        </div>
       </div>
     </div>
 
-    <div>
-      <div class="section-title">Map</div>
-      <div class="ctrl-row">
-        <div class="ctrl-label">Map Radius <span class="ctrl-value" id="v-mrad">500 m</span></div>
-        <input type="range" id="s-mrad" min="100" max="2000" value="500" step="10">
-      </div>
-      <div class="ctrl-row">
-        <div class="ctrl-label">Ref Altitude <span class="ctrl-value" id="v-ralt">100 m</span></div>
-        <input type="range" id="s-ralt" min="20" max="300" value="100" step="5">
+    <!-- ── PFD controls ── -->
+    <div class="tab-controls hidden" data-for="pfd">
+      <div>
+        <div class="section-title">Flight</div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">Pitch <span class="ctrl-value" id="v-pitch">0.0°</span></div>
+          <input type="range" id="s-pitch" min="-30" max="30" value="0" step="0.5">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">Roll <span class="ctrl-value" id="v-roll">0.0°</span></div>
+          <input type="range" id="s-roll" min="-60" max="60" value="0" step="0.5">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">Speed <span class="ctrl-value" id="v-speed">8.0 m/s</span></div>
+          <input type="range" id="s-speed" min="0" max="30" value="8" step="0.1">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">Altitude <span class="ctrl-value" id="v-palt">100 m</span></div>
+          <input type="range" id="s-palt" min="0" max="400" value="100" step="1">
+        </div>
       </div>
     </div>
 
-    <div>
-      <div class="section-title">FOV Cone</div>
-      <div class="ctrl-row">
-        <div class="ctrl-label">FOV Angle <span class="ctrl-value" id="v-fov">90°</span></div>
-        <input type="range" id="s-fov" min="15" max="150" value="90" step="1">
+    <!-- ── Crosshair controls ── -->
+    <div class="tab-controls hidden" data-for="crosshair">
+      <div>
+        <div class="section-title">Mode</div>
+        <div class="toggle-row" onclick="toggleFPV()">
+          <div class="track on" id="t-fpv"><div class="thumb"></div></div>
+          FPV Mode
+        </div>
       </div>
-      <div class="ctrl-row">
-        <div class="ctrl-label">Det. Range <span class="ctrl-value" id="v-det">300 m</span></div>
-        <input type="range" id="s-det" min="30" max="800" value="500" step="10">
+      <div>
+        <div class="section-title">Dimensions</div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">Line Length <span class="ctrl-value" id="v-ll">10</span></div>
+          <input type="range" id="s-ll" min="4" max="40" value="10" step="0.5">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">Line Gap <span class="ctrl-value" id="v-lg">4</span></div>
+          <input type="range" id="s-lg" min="1" max="20" value="4" step="0.5">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">Thickness <span class="ctrl-value" id="v-lt">1.5</span></div>
+          <input type="range" id="s-lt" min="0.5" max="5" value="1.5" step="0.1">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">Dot Radius <span class="ctrl-value" id="v-dr">2</span></div>
+          <input type="range" id="s-dr" min="0" max="12" value="2" step="0.5">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">Chase Circle R <span class="ctrl-value" id="v-cc">14</span></div>
+          <input type="range" id="s-cc" min="5" max="50" value="14" step="0.5">
+        </div>
       </div>
     </div>
 
-    <div>
-      <div class="section-title">Target</div>
-      <div class="ctrl-row">
-        <div class="ctrl-label">Bearing <span class="ctrl-value" id="v-tb">45°</span></div>
-        <input type="range" id="s-tb" min="0" max="359" value="45" step="1">
+    <!-- ── Full HUD controls ── -->
+    <div class="tab-controls hidden" data-for="fullhud">
+      <div class="hud-tip">
+        Configure each component in its own tab, then return here to preview the
+        <strong>complete HUD layout</strong> as it will appear in-game.
       </div>
-      <div class="ctrl-row">
-        <div class="ctrl-label">Range <span class="ctrl-value" id="v-tr">40%</span></div>
-        <input type="range" id="s-tr" min="0" max="100" value="40" step="1">
+      <div>
+        <div class="section-title">Crosshair</div>
+        <div class="toggle-row" onclick="toggleFPV()">
+          <div class="track on" id="t-fpv2"><div class="thumb"></div></div>
+          FPV Mode
+        </div>
       </div>
-      <div class="toggle-row" onclick="toggleAnim('target')">
-        <div class="track" id="t-target"><div class="thumb"></div></div>
-        Auto-orbit target
+      <div>
+        <div class="section-title">Drone Model</div>
+        <div class="toggle-row" onclick="toggleDrone()">
+          <div class="track on" id="t-drone"><div class="thumb"></div></div>
+          Show drone placeholder
+        </div>
+      </div>
+      <div>
+        <div class="section-title">Demo</div>
+        <div class="toggle-row" onclick="toggleAnim('demo')">
+          <div class="track" id="t-demo"><div class="thumb"></div></div>
+          Animate flight
+        </div>
+        <div class="toggle-row" onclick="toggleAnim('target')">
+          <div class="track" id="t-target2"><div class="thumb"></div></div>
+          Orbit target
+        </div>
       </div>
     </div>
 
   </aside>
 
   <main class="preview">
-    <div class="canvas-wrap">
+
+    <!-- Component tabs share this canvas -->
+    <div class="canvas-wrap" id="component-preview">
       <canvas id="cv" width="420" height="420"></canvas>
-      <div class="size-row">
-        <button class="size-btn" onclick="setSize(252)">252 × 252 (game)</button>
+      <div class="size-row" id="sr-minimap">
+        <button class="size-btn"        onclick="setSize(252)">252 × 252 (game)</button>
         <button class="size-btn active" onclick="setSize(420)">420 × 420 (studio)</button>
       </div>
+      <div class="size-row hidden" id="sr-pfd">
+        <button class="size-btn active">480 × 320 (studio)</button>
+      </div>
+      <div class="size-row hidden" id="sr-crosshair">
+        <button class="size-btn active">420 × 420 (studio)</button>
+      </div>
     </div>
+
+    <!-- Full HUD fills the preview area -->
+    <div class="fullhud-wrap hidden" id="fullhud-preview">
+      <canvas id="cv-hud"></canvas>
+    </div>
+
     <div class="statusbar" id="statusbar">ALT 100 m · YAW 0° · FOV 90°</div>
   </main>
 
 </div>
 
-<script src="graph_data.js"></script>
+<script src="munich_graph.js"></script>
 <script>
 'use strict';
 
-/* ─── constants ──────────────────────────────────────────── */
-const ROAD_BACK_MIN = 2.5; const ROAD_BACK_MAX = 9;
-const ROAD_MIN      = 1.2; const ROAD_MAX      = 5;
+/* ─── constants ──────────────────────────────────────────────────────────── */
+const ROAD_BACK_MIN = 2.5, ROAD_BACK_MAX = 9;
+const ROAD_MIN      = 1.2, ROAD_MAX      = 5;
 
-/* ─── colours ────────────────────────────────────────────── */
 const COL = {
     bg:      'rgba(5,7,12,0.92)',
     ring:    'rgba(55,62,90,0.92)',
@@ -245,451 +377,757 @@ const COL = {
     heading: '#55a5ff',
 };
 
-/* ─── real road graph (Marienplatz Munich, from nodes.csv / edges.csv) ── */
-const ROADS = (function buildFromCsvData() {
+/* ─── road graph ──────────────────────────────────────────────────────────── */
+const ROADS = (function() {
     const nodes = {}, adj = {};
     let minElev = Infinity, maxElev = -Infinity;
     for (const [id, pos] of Object.entries(GRAPH_NODES)) {
-        const nid = +id;
-        const z   = pos[2] !== undefined ? pos[2] : 0;
+        const nid = +id, z = pos[2] !== undefined ? pos[2] : 0;
         nodes[nid] = { x: pos[0], y: pos[1], z };
         if (z < minElev) minElev = z;
         if (z > maxElev) maxElev = z;
         adj[nid] = [];
     }
     for (const [a, b] of GRAPH_EDGES) {
-        if (adj[a] && adj[b]) {
-            adj[a].push(b);
-            adj[b].push(a);
-        }
+        if (adj[a] && adj[b]) { adj[a].push(b); adj[b].push(a); }
     }
     const elevRange = maxElev - minElev;
     const refElev   = (minElev + maxElev) / 2;
     return { nodes, adj, minElev, maxElev, elevRange, refElev };
 })();
 
-/* ─── state ─────────────────────────────────────────────── */
-const S = {
-    altM:    100,  yawDeg:  0,
-    mradM:   500,  raltM:   100,
-    fovDeg:  90,   detM:    500,
-    tgtBear: 45,   tgtPct:  40,
+/* ─── shared state ────────────────────────────────────────────────────────── */
+const S = {                          // minimap + shared altitude/heading
+    altM: 100,  yawDeg: 0,
+    mradM: 500, raltM: 100,
+    fovDeg: 90, detM: 500,
+    tgtBear: 45, tgtPct: 40,
 };
-const animOn = { heading: false, target: false };
+const P = { pitch: 0, roll: 0, speedMs: 8 }; // PFD flight (altM from S.altM)
+const X = {                                    // crosshair
+    fpv: true,
+    lineLength: 10, lineGap: 4, lineThickness: 1.5,
+    dotRadius: 2,   chaseCircleR: 14,
+};
+const animOn = { heading: false, target: false, demo: false };
+let showDrone = true;
 
-/* ─── slider wiring ──────────────────────────────────────── */
-const sliders = [
-    ['s-alt',  'v-alt',  'altM',    v => v + ' m'],
-    ['s-yaw',  'v-yaw',  'yawDeg',  v => v + '°'],
-    ['s-mrad', 'v-mrad', 'mradM',   v => v + ' m'],
-    ['s-ralt', 'v-ralt', 'raltM',   v => v + ' m'],
-    ['s-fov',  'v-fov',  'fovDeg',  v => v + '°'],
-    ['s-det',  'v-det',  'detM',    v => v + ' m'],
-    ['s-tb',   'v-tb',   'tgtBear', v => v + '°'],
-    ['s-tr',   'v-tr',   'tgtPct',  v => v + '%'],
-];
-for (const [sid, vid, key, fmt] of sliders) {
-    const el = document.getElementById(sid);
+/* ─── tab management ─────────────────────────────────────────────────────── */
+let activeTab = 'minimap';
+const CV     = document.getElementById('cv');
+const HUD_CV = document.getElementById('cv-hud');
+
+document.querySelectorAll('.tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+        activeTab = btn.dataset.tab;
+        document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === btn));
+        document.querySelectorAll('.tab-controls').forEach(c =>
+            c.classList.toggle('hidden', c.dataset.for !== activeTab));
+        const isHUD = activeTab === 'fullhud';
+        document.getElementById('component-preview').classList.toggle('hidden', isHUD);
+        document.getElementById('fullhud-preview').classList.toggle('hidden', !isHUD);
+        if (!isHUD) activateComponentTab(activeTab);
+        else resizeHUDCanvas();
+    });
+});
+
+function activateComponentTab(tab) {
+    document.getElementById('sr-minimap').classList.toggle('hidden', tab !== 'minimap');
+    document.getElementById('sr-pfd').classList.toggle('hidden', tab !== 'pfd');
+    document.getElementById('sr-crosshair').classList.toggle('hidden', tab !== 'crosshair');
+    if (tab === 'minimap')   setSize(CV.width < 300 ? 252 : 420, false);
+    else if (tab === 'pfd')  { CV.width = 480; CV.height = 320; }
+    else if (tab === 'crosshair') { CV.width = 420; CV.height = 420; }
+}
+
+function resizeHUDCanvas() {
+    const wrap = document.getElementById('fullhud-preview');
+    const aw = wrap.clientWidth  - 40;
+    const ah = wrap.clientHeight - 40;
+    const aspect = 16 / 9;
+    let w = aw, h = aw / aspect;
+    if (h > ah) { h = ah; w = ah * aspect; }
+    HUD_CV.width  = Math.round(w);
+    HUD_CV.height = Math.round(h);
+}
+new ResizeObserver(() => { if (activeTab === 'fullhud') resizeHUDCanvas(); })
+    .observe(document.getElementById('fullhud-preview'));
+
+/* ─── slider wiring ──────────────────────────────────────────────────────── */
+function wire(id, valId, key, obj, fmt) {
+    const el = document.getElementById(id);
+    if (!el) return;
     el.addEventListener('input', () => {
-        S[key] = parseFloat(el.value);
-        document.getElementById(vid).textContent = fmt(S[key]);
+        obj[key] = parseFloat(el.value);
+        document.getElementById(valId).textContent = fmt(obj[key]);
     });
 }
+wire('s-alt',  'v-alt',  'altM',    S, v => v + ' m');
+wire('s-yaw',  'v-yaw',  'yawDeg',  S, v => v + '°');
+wire('s-mrad', 'v-mrad', 'mradM',   S, v => v + ' m');
+wire('s-ralt', 'v-ralt', 'raltM',   S, v => v + ' m');
+wire('s-fov',  'v-fov',  'fovDeg',  S, v => v + '°');
+wire('s-det',  'v-det',  'detM',    S, v => v + ' m');
+wire('s-tb',   'v-tb',   'tgtBear', S, v => v + '°');
+wire('s-tr',   'v-tr',   'tgtPct',  S, v => v + '%');
+wire('s-pitch','v-pitch','pitch',   P, v => v.toFixed(1) + '°');
+wire('s-roll', 'v-roll', 'roll',    P, v => v.toFixed(1) + '°');
+wire('s-speed','v-speed','speedMs', P, v => v.toFixed(1) + ' m/s');
+wire('s-palt', 'v-palt', 'altM',   S, v => v + ' m');  // links to same S.altM
+wire('s-ll',   'v-ll',   'lineLength',   X, v => v.toFixed(1));
+wire('s-lg',   'v-lg',   'lineGap',      X, v => v.toFixed(1));
+wire('s-lt',   'v-lt',   'lineThickness',X, v => v.toFixed(1));
+wire('s-dr',   'v-dr',   'dotRadius',    X, v => v.toFixed(1));
+wire('s-cc',   'v-cc',   'chaseCircleR', X, v => v.toFixed(1));
 
 function toggleAnim(k) {
     animOn[k] = !animOn[k];
-    document.getElementById('t-' + k).classList.toggle('on', animOn[k]);
+    const el = document.getElementById('t-' + k);
+    if (el) el.classList.toggle('on', animOn[k]);
+    const el2 = document.getElementById('t-' + k + '2');
+    if (el2) el2.classList.toggle('on', animOn[k]);
 }
 
-/* ─── canvas sizing ─────────────────────────────────────── */
-const CV = document.getElementById('cv');
+function toggleFPV() {
+    X.fpv = !X.fpv;
+    document.getElementById('t-fpv').classList.toggle('on', X.fpv);
+    document.getElementById('t-fpv2').classList.toggle('on', X.fpv);
+}
 
-function setSize(sz) {
+/* ─── canvas sizing (minimap) ────────────────────────────────────────────── */
+function setSize(sz, updateBtn = true) {
     CV.width = CV.height = sz;
-    document.querySelectorAll('.size-btn').forEach(b =>
-        b.classList.toggle('active', b.textContent.startsWith(sz)));
+    if (updateBtn)
+        document.querySelectorAll('#sr-minimap .size-btn').forEach(b =>
+            b.classList.toggle('active', b.textContent.startsWith(sz)));
 }
 
-/* ─── maths helpers ─────────────────────────────────────── */
+/* ─── maths helpers ──────────────────────────────────────────────────────── */
 const lerp  = (a, b, t) => a + (b - a) * t;
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const deg   = d => d * Math.PI / 180;
 
-/* ─── world-space segment clip (with z interpolation) ───── */
+/* ─── world-space segment clip ───────────────────────────────────────────── */
 function clipSeg(ax, ay, az, bx, by, bz, clipR) {
     const R2  = clipR * clipR;
-    const aIn = ax * ax + ay * ay <= R2;
-    const bIn = bx * bx + by * by <= R2;
+    const aIn = ax*ax + ay*ay <= R2;
+    const bIn = bx*bx + by*by <= R2;
     if (aIn && bIn) return [ax, ay, az, bx, by, bz];
-
-    const dx = bx - ax, dy = by - ay, dz = bz - az;
-    const a  = dx * dx + dy * dy;
+    const dx = bx-ax, dy = by-ay, dz = bz-az;
+    const a  = dx*dx + dy*dy;
     if (a < 1e-8) return null;
-    const b    = 2 * (ax * dx + ay * dy);
-    const c    = ax * ax + ay * ay - R2;
-    const disc = b * b - 4 * a * c;
+    const b    = 2*(ax*dx + ay*dy);
+    const c    = ax*ax + ay*ay - R2;
+    const disc = b*b - 4*a*c;
     if (disc < 0) return null;
-
     const sq = Math.sqrt(disc);
-    const t0 = (-b - sq) / (2 * a);
-    const t1 = (-b + sq) / (2 * a);
-    const px  = t => ax + t * dx;
-    const py  = t => ay + t * dy;
-    const pz  = t => az + t * dz;
-
-    if (aIn) { const t = clamp(t1, 0, 1); return [ax, ay, az, px(t), py(t), pz(t)]; }
-    if (bIn) { const t = clamp(t0, 0, 1); return [px(t), py(t), pz(t), bx, by, bz]; }
+    const t0 = (-b - sq) / (2*a), t1 = (-b + sq) / (2*a);
+    const px = t => ax + t*dx, py = t => ay + t*dy, pz = t => az + t*dz;
+    if (aIn) { const t = clamp(t1,0,1); return [ax,ay,az, px(t),py(t),pz(t)]; }
+    if (bIn) { const t = clamp(t0,0,1); return [px(t),py(t),pz(t), bx,by,bz]; }
     if (t1 < 0 || t0 > 1 || t0 >= t1) return null;
-    return [px(clamp(t0,0,1)), py(clamp(t0,0,1)), pz(clamp(t0,0,1)),
-            px(clamp(t1,0,1)), py(clamp(t1,0,1)), pz(clamp(t1,0,1))];
+    return [px(clamp(t0,0,1)),py(clamp(t0,0,1)),pz(clamp(t0,0,1)),
+            px(clamp(t1,0,1)),py(clamp(t1,0,1)),pz(clamp(t1,0,1))];
 }
 
-/* ─── minimap renderer ──────────────────────────────────── */
-function draw(ctx, W, H) {
-    const cx = W / 2, cy = H / 2;
+/* ═══════════════════════════════════════════════════════════════════════════
+   MINIMAP RENDERER
+   ═══════════════════════════════════════════════════════════════════════════ */
+function drawMinimap(ctx, W, H, noClear) {
+    const cx = W/2, cy = H/2;
     const R  = Math.min(cx, cy) * 0.78 - 2;
 
-    /* altitude zoom */
     const mapRadCm  = S.mradM * 100;
     const detRangCm = S.detM  * 100;
-    const altFac    = clamp(Math.max(S.altM, 10) / Math.max(S.raltM, 1), 0.15, 6);
+    const altFac    = clamp(Math.max(S.altM,10) / Math.max(S.raltM,1), 0.15, 6);
     const effRadCm  = clamp(mapRadCm * altFac, 8000, 20000000);
     const scale     = R / effRadCm;
-    const clipR   = effRadCm * 0.76;
+    const clipR     = effRadCm * 0.76;
 
-    // Road width scales with altitude: widest at ground, minimum from 150 m up
-    const altT     = clamp((S.altM - 20) / (150 - 20), 0, 1);
-    const roadBackW = lerp(ROAD_BACK_MAX, ROAD_BACK_MIN, altT);
-    const roadW     = lerp(ROAD_MAX,      ROAD_MIN,      altT);
+    const altT       = clamp((S.altM-20)/(150-20), 0, 1);
+    const roadBackW  = lerp(ROAD_BACK_MAX, ROAD_BACK_MIN, altT);
+    const roadW      = lerp(ROAD_MAX,      ROAD_MIN,      altT);
 
-    /*
-     * 2.5D perspective projection — camera pitched above and in front of drone.
-     * sN = forward distance in screen-pixels (positive = ahead = North in heading-up).
-     * k  = perspective scale: shrinks as sN grows (things ahead appear smaller/closer
-     *      to centre), expands for negative sN (things behind appear larger).
-     * Result: N-S road lines converge toward a vanishing point at the top;
-     *         E-W lines stay horizontal but compress with distance.
-     */
-    const PITCH_MAX  = 0.50;   // tilt at low altitude  (~29°)
-    const PITCH_MIN  = 0.05;   // tilt at high altitude (~3°, near top-down)
-    const ALT_LOW    = 30;     // m — full tilt below this
-    const ALT_HIGH   = 300;    // m — near flat above this
-    const tAlt       = Math.max(0, Math.min(1, (S.altM - ALT_LOW) / (ALT_HIGH - ALT_LOW)));
-    const tSmooth    = tAlt * tAlt * (3 - 2 * tAlt);   // smoothstep
-    const pitch      = lerp(PITCH_MAX, PITCH_MIN, tSmooth);
-    const focal    = R * 0.9;             // focal length — controls perspective strength
-    const sinP     = Math.sin(pitch);
-    const cosP     = Math.cos(pitch);
+    const PITCH_MAX = 0.50, PITCH_MIN = 0.05;
+    const tAlt      = Math.max(0, Math.min(1, (S.altM-30)/(300-30)));
+    const tSmooth   = tAlt*tAlt*(3-2*tAlt);
+    const pitch     = lerp(PITCH_MAX, PITCH_MIN, tSmooth);
+    const focal     = R * 0.9;
+    const sinP      = Math.sin(pitch), cosP = Math.cos(pitch);
 
-    /*
-     * z is elevation in the same cm units as x/y. Higher ground shifts the
-     * screen point slightly upward. The scale factor (0.12) keeps the effect
-     * subtle — an 80 m terrain range causes ~4 px of vertical relief.
-     */
-    /*
-     * Adaptive elevation scale.
-     * For terrain ranges below 50 m, amplify so they always render
-     * with the same visual relief as a 50 m range would.
-     * For ranges above 50 m, use natural scale (no exaggeration).
-     * The amplification factor equals (50 / actualRange), which is exactly
-     * cancelled by the proportionally smaller absolute z-offsets, so the peak
-     * node always shifts by the same number of pixels regardless of how flat
-     * the terrain is — making subtle changes legible without distorting large ones.
-     */
-    /*
-     * Power-law altitude amplification.
-     * For ranges < 50 m: effectiveM = actualM^0.6 × 50^0.4
-     *   → 1 m looks like ~4.6 m, 5 m looks like ~14 m, 33 m looks like ~40 m
-     * For ranges ≥ 50 m: 1× exactly — 100 m stays 100 m, no suppression.
-     * ELEV_EXP controls the curve (lower = more boost for tiny ranges).
-     * Z_BASE is the overall visual intensity; tune this to taste.
-     */
-    const ELEV_REF_M  = 50;
-    const ELEV_EXP    = 0.6;
-    const Z_BASE      = 0.7;
-    const elevRangeM  = Math.max(ROADS.elevRange / 100, 0.1);
-    const effectiveM  = elevRangeM < ELEV_REF_M
-        ? Math.pow(elevRangeM, ELEV_EXP) * Math.pow(ELEV_REF_M, 1 - ELEV_EXP)
+    const ELEV_REF_M = 50, ELEV_EXP = 0.6, Z_BASE = 0.7;
+    const elevRangeM = Math.max(ROADS.elevRange/100, 0.1);
+    const effectiveM = elevRangeM < ELEV_REF_M
+        ? Math.pow(elevRangeM, ELEV_EXP) * Math.pow(ELEV_REF_M, 1-ELEV_EXP)
         : elevRangeM;
-    const zNormScale  = ROADS.elevRange > 0 ? (effectiveM / elevRangeM) * Z_BASE : 0;
+    const zNormScale = ROADS.elevRange > 0 ? (effectiveM/elevRangeM)*Z_BASE : 0;
 
     function ts(relN, relE, relZ) {
-        const sX = relE * scale;
-        const sN = relN * scale;          // positive = ahead (forward)
-        const k  = focal / (focal + sN * sinP);
-        const zShift = relZ !== undefined
-            ? (relZ - ROADS.refElev) * scale * zNormScale
-            : 0;
-        return [cx + sX * k, cy - sN * cosP * k - zShift];
+        const sX = relE*scale, sN = relN*scale;
+        const k  = focal / (focal + sN*sinP);
+        const zShift = relZ !== undefined ? (relZ - ROADS.refElev)*scale*zNormScale : 0;
+        return [cx + sX*k, cy - sN*cosP*k - zShift];
     }
-
-    /*
-     * Heading-up world transform.
-     * Rotate every world point by -yawRad so the drone's forward direction
-     * always maps to "North" in ts(), which maps to UP on screen.
-     * Formula: rotN = relN*cos(yr) + relE*sin(yr)
-     *          rotE = -relN*sin(yr) + relE*cos(yr)
-     */
-    const yr   = deg(S.yawDeg);
-    const cosY = Math.cos(yr), sinY = Math.sin(yr);
+    const yr = deg(S.yawDeg), cosY = Math.cos(yr), sinY = Math.sin(yr);
     function ws(relN, relE, relZ) {
-        return ts(relN * cosY + relE * sinY,
-                 -relN * sinY + relE * cosY,
-                 relZ);
+        return ts(relN*cosY + relE*sinY, -relN*sinY + relE*cosY, relZ);
     }
 
+    const frustLen = Math.min(detRangCm, clipR*0.95);
+    const halfFov  = deg(S.fovDeg/2);
+    function fovPt(a) { return ts(Math.cos(a)*frustLen, Math.sin(a)*frustLen); }
 
-    /* FOV: scales with altitude, always centred on screen-up (drone forward) */
-    const frustLen = Math.min(detRangCm, clipR * 0.95);
-    const halfFov  = deg(S.fovDeg / 2);
-    function fovPt(a) {
-        return ts(Math.cos(a) * frustLen, Math.sin(a) * frustLen);
-    }
-
-    /* target in heading-up world space */
     const tBr   = deg(S.tgtBear);
-    const tDist = (S.tgtPct / 100) * clipR;
-    const [tSx, tSy] = ws(tDist * Math.cos(tBr), tDist * Math.sin(tBr));
+    const tDist = (S.tgtPct/100)*clipR;
+    const [tSx, tSy] = ws(tDist*Math.cos(tBr), tDist*Math.sin(tBr));
 
-    /* target-in-FOV: angle of target relative to drone heading */
     let relAng = tBr - yr;
-    while (relAng >  Math.PI) relAng -= 2 * Math.PI;
-    while (relAng < -Math.PI) relAng += 2 * Math.PI;
+    while (relAng >  Math.PI) relAng -= 2*Math.PI;
+    while (relAng < -Math.PI) relAng += 2*Math.PI;
     const tInFov = Math.abs(relAng) <= halfFov && tDist <= frustLen;
 
-    /* ── clear ── */
-    ctx.clearRect(0, 0, W, H);
+    if (!noClear) ctx.clearRect(0, 0, W, H);
 
-    /* ── 1. background circle + clip ── */
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, 0, 2 * Math.PI);
-    ctx.fillStyle = COL.bg;
-    ctx.fill();
-    ctx.clip();
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, 2*Math.PI);
+    ctx.fillStyle = COL.bg; ctx.fill(); ctx.clip();
 
-    /* ── 2. roads (heading-up: use ws() for all world points) ── */
-    const bpR2 = (clipR * 2) ** 2;
-    ctx.lineCap  = 'butt';
-    ctx.lineJoin = 'round';
-
+    const bpR2 = (clipR*2)**2;
+    ctx.lineCap = 'butt'; ctx.lineJoin = 'round';
     const screenSegs = [];
     for (const [id, nbrs] of Object.entries(ROADS.adj)) {
         const na = ROADS.nodes[+id];
         for (const nb_id of nbrs) {
             if (nb_id <= +id) continue;
             const nb = ROADS.nodes[nb_id];
-            if (na.x * na.x + na.y * na.y > bpR2 &&
-                nb.x * nb.x + nb.y * nb.y > bpR2) continue;
+            if (na.x*na.x+na.y*na.y > bpR2 && nb.x*nb.x+nb.y*nb.y > bpR2) continue;
             const s = clipSeg(na.x, na.y, na.z, nb.x, nb.y, nb.z, clipR);
             if (!s) continue;
-            screenSegs.push([ws(s[0], s[1], s[2]), ws(s[3], s[4], s[5]), s[2], s[5]]);
+            screenSegs.push([ws(s[0],s[1],s[2]), ws(s[3],s[4],s[5]), s[2], s[5]]);
         }
     }
+    ctx.shadowColor = 'rgba(160,165,185,0.28)'; ctx.shadowBlur = roadBackW*2.5;
+    ctx.strokeStyle = COL.roadBack; ctx.lineWidth = roadBackW;
+    for (const [[ax,ay],[bx,by]] of screenSegs) { ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke(); }
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = COL.road; ctx.lineWidth = roadW;
+    for (const [[ax,ay],[bx,by]] of screenSegs) { ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke(); }
 
-    ctx.shadowColor = 'rgba(160,165,185,0.28)';
-    ctx.shadowBlur  = roadBackW * 2.5;
-    ctx.strokeStyle = COL.roadBack;
-    ctx.lineWidth   = roadBackW;
-    for (const [[ax, ay], [bx, by]] of screenSegs) {
-        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
-    }
-    ctx.shadowBlur  = 0;
-    ctx.strokeStyle = COL.road;
-    ctx.lineWidth   = roadW;
-    for (const [[ax, ay], [bx, by]] of screenSegs) {
-        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
-    }
-
-    /* ── 3. FOV cone — always pointing up, fill + arc only (no edge lines) ── */
     const ARC_N = 22;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    for (let i = 0; i <= ARC_N; i++)
-        ctx.lineTo(...fovPt(lerp(-halfFov, halfFov, i / ARC_N)));
-    ctx.closePath();
-    ctx.fillStyle = COL.fovFill;
-    ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    for (let i = 0; i <= ARC_N; i++) ctx.lineTo(...fovPt(lerp(-halfFov, halfFov, i/ARC_N)));
+    ctx.closePath(); ctx.fillStyle = COL.fovFill; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(...fovPt(-halfFov));
+    for (let i = 1; i <= ARC_N; i++) ctx.lineTo(...fovPt(lerp(-halfFov, halfFov, i/ARC_N)));
+    ctx.strokeStyle = COL.fovEdge; ctx.lineWidth = 1.5; ctx.stroke();
 
-    ctx.beginPath();
-    ctx.moveTo(...fovPt(-halfFov));
-    for (let i = 1; i <= ARC_N; i++)
-        ctx.lineTo(...fovPt(lerp(-halfFov, halfFov, i / ARC_N)));
-    ctx.strokeStyle = COL.fovEdge;
-    ctx.lineWidth   = 1.5;
-    ctx.stroke();
-
-    /* ── 4. target ── */
-    const dotR = R * 0.042;
-    const tCol = tInFov ? COL.tgtLit : COL.tgt;
-
-    // Two staggered pulse rings — elliptical (Y compressed by cosP = ground plane pitch)
+    const dotR = R*0.042, tCol = tInFov ? COL.tgtLit : COL.tgt;
     const PULSE_PERIOD = 1.4;
-    for (const offset of [0, PULSE_PERIOD * 0.5]) {
-        const t  = ((animT + offset) % PULSE_PERIOD) / PULSE_PERIOD;
-        const pr = dotR * (1.5 + t * 3.2);
-        ctx.beginPath();
-        ctx.ellipse(tSx, tSy, pr, pr * cosP, 0, 0, 2 * Math.PI);
-        ctx.strokeStyle = tCol;
-        ctx.lineWidth   = 2.5;
-        ctx.globalAlpha = (1 - t) * 0.65;
-        ctx.stroke();
-        ctx.globalAlpha = 1;
+    for (const offset of [0, PULSE_PERIOD*0.5]) {
+        const t  = ((animT+offset) % PULSE_PERIOD) / PULSE_PERIOD;
+        const pr = dotR*(1.5 + t*3.2);
+        ctx.beginPath(); ctx.ellipse(tSx, tSy, pr, pr*cosP, 0, 0, 2*Math.PI);
+        ctx.strokeStyle = tCol; ctx.lineWidth = 2.5;
+        ctx.globalAlpha = (1-t)*0.65; ctx.stroke(); ctx.globalAlpha = 1;
     }
+    ctx.beginPath(); ctx.ellipse(tSx, tSy, dotR*2.0, dotR*2.0*cosP, 0, 0, 2*Math.PI);
+    ctx.strokeStyle = tCol; ctx.lineWidth = 2.5; ctx.globalAlpha = 0.75; ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.ellipse(tSx, tSy, dotR, dotR*cosP, 0, 0, 2*Math.PI);
+    ctx.fillStyle = tCol; ctx.fill();
 
-    // Static ring
-    ctx.beginPath();
-    ctx.ellipse(tSx, tSy, dotR * 2.0, dotR * 2.0 * cosP, 0, 0, 2 * Math.PI);
-    ctx.strokeStyle = tCol;
-    ctx.lineWidth   = 2.5;
-    ctx.globalAlpha = 0.75;
-    ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.restore();
 
-    // Filled dot
-    ctx.beginPath();
-    ctx.ellipse(tSx, tSy, dotR, dotR * cosP, 0, 0, 2 * Math.PI);
-    ctx.fillStyle = tCol;
-    ctx.fill();
+    const aFwd  =  R*0.135/scale, aBack = -R*0.047/scale, aHalf = R*0.068/scale;
+    const [tipX,tipY] = ts( aFwd, 0);
+    const [blX, blY ] = ts( aBack, -aHalf);
+    const [brX, brY ] = ts( aBack,  aHalf);
 
-    ctx.restore(); // end circle clip
-
-    /* ── 5. drone icon — projected through ts() so it lies on the tilted map plane ── */
-    // Arrow dimensions in world-space cm, scaled to stay constant screen size
-    const aFwd  =  R * 0.135 / scale;   // forward extent (North)
-    const aBack = -R * 0.047 / scale;   // rearward extent
-    const aHalf =  R * 0.068 / scale;   // half-width (East/West)
-
-    // Project vertices through the same perspective as the streets
-    const [tipX, tipY] = ts( aFwd,   0);
-    const [blX,  blY ] = ts( aBack, -aHalf);
-    const [brX,  brY ] = ts( aBack,  aHalf);
-
-    // Radial glow pad at drone origin
-    const glowGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.22);
+    const glowGrad = ctx.createRadialGradient(cx,cy,0, cx,cy, R*0.22);
     glowGrad.addColorStop(0,   'rgba(60,140,255,0.30)');
     glowGrad.addColorStop(0.5, 'rgba(60,140,255,0.12)');
     glowGrad.addColorStop(1,   'rgba(60,140,255,0)');
-    ctx.beginPath();
-    ctx.arc(cx, cy, R * 0.22, 0, 2 * Math.PI);
-    ctx.fillStyle = glowGrad;
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, cy, R*0.22, 0, 2*Math.PI);
+    ctx.fillStyle = glowGrad; ctx.fill();
 
-    // Drop shadow
-    ctx.beginPath();
-    ctx.moveTo(tipX + 1, tipY + 2.5);
-    ctx.lineTo(blX  + 1, blY  + 2.5);
-    ctx.lineTo(brX  + 1, brY  + 2.5);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fill();
+    ctx.beginPath(); ctx.moveTo(tipX+1,tipY+2.5); ctx.lineTo(blX+1,blY+2.5); ctx.lineTo(brX+1,brY+2.5);
+    ctx.closePath(); ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fill();
 
-    // Main arrow — gradient tip (bright) → base (dark)
     const arrowGrad = ctx.createLinearGradient(cx, tipY, cx, blY);
     arrowGrad.addColorStop(0,    'rgba(200,230,255,0.97)');
     arrowGrad.addColorStop(0.38, '#55a5ff');
     arrowGrad.addColorStop(1,    'rgba(22,58,140,0.92)');
-    ctx.beginPath();
-    ctx.moveTo(tipX, tipY);
-    ctx.lineTo(blX,  blY);
-    ctx.lineTo(brX,  brY);
-    ctx.closePath();
-    ctx.fillStyle = arrowGrad;
-    ctx.fill();
+    ctx.beginPath(); ctx.moveTo(tipX,tipY); ctx.lineTo(blX,blY); ctx.lineTo(brX,brY);
+    ctx.closePath(); ctx.fillStyle = arrowGrad; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(blX,blY); ctx.lineTo(tipX,tipY); ctx.lineTo(brX,brY);
+    ctx.strokeStyle = 'rgba(180,220,255,0.55)'; ctx.lineWidth = 1; ctx.stroke();
 
-    // Highlight rim
-    ctx.beginPath();
-    ctx.moveTo(blX, blY);
-    ctx.lineTo(tipX, tipY);
-    ctx.lineTo(brX, brY);
-    ctx.strokeStyle = 'rgba(180,220,255,0.55)';
-    ctx.lineWidth   = 1;
-    ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, 2*Math.PI);
+    ctx.strokeStyle = COL.ring; ctx.lineWidth = Math.max(1.5, R * 0.017); ctx.stroke();
 
-    /* ── 6. ring border ── */
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, 0, 2 * Math.PI);
-    ctx.strokeStyle = COL.ring;
-    ctx.lineWidth   = 3;
-    ctx.stroke();
-
-    /* ── 7. compass rose — inside the circle boundary ── */
-    const touter = R - 3;           // tick outer edge (just inside the ring border)
-    const tLg    = R * 0.07;        // cardinal tick inward length
-    const tSm    = R * 0.04;        // minor tick inward length
-    const fSz    = Math.max(9, R * 0.088);
-
-    // Cardinal labels + ticks
-    for (const [lbl, bear] of [['N', 0], ['E', 90], ['S', 180], ['W', 270]]) {
-        const a  = deg(bear - 90) - yr;
-        const dx = Math.cos(a), dy = Math.sin(a);
+    const touter = R * 0.98, tLg = R*0.07, tSm = R*0.04, fSz = Math.max(9, R*0.088);
+    for (const [lbl, bear] of [['N',0],['E',90],['S',180],['W',270]]) {
+        const a = deg(bear-90) - yr, dx = Math.cos(a), dy = Math.sin(a);
         ctx.beginPath();
-        ctx.moveTo(cx + dx * touter,          cy + dy * touter);
-        ctx.lineTo(cx + dx * (touter - tLg),  cy + dy * (touter - tLg));
-        ctx.strokeStyle = COL.compass;
-        ctx.lineWidth   = 1.5;
-        ctx.stroke();
-        const lblR = touter - tLg - fSz * 0.65;
-        ctx.fillStyle    = 'rgba(255,255,255,0.90)';
-        ctx.font         = `bold ${fSz}px 'Segoe UI', sans-serif`;
-        ctx.textAlign    = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(lbl, Math.round(cx + dx * lblR), Math.round(cy + dy * lblR));
+        ctx.moveTo(cx+dx*touter, cy+dy*touter);
+        ctx.lineTo(cx+dx*(touter-tLg), cy+dy*(touter-tLg));
+        ctx.strokeStyle = COL.compass; ctx.lineWidth = 1.5; ctx.stroke();
+        const lblR = touter - tLg - fSz*0.65;
+        ctx.fillStyle = 'rgba(255,255,255,0.90)';
+        ctx.font = `bold ${fSz}px 'Segoe UI', sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(lbl, Math.round(cx+dx*lblR), Math.round(cy+dy*lblR));
     }
-
-    // Minor ticks
     for (let b = 0; b < 360; b += 10) {
         if (b % 90 === 0) continue;
-        const maj = b % 30 === 0;
-        const a   = deg(b - 90) - yr;
-        const tL  = maj ? tLg * 0.6 : tSm;
-        const dx  = Math.cos(a), dy = Math.sin(a);
+        const maj = b % 30 === 0, a = deg(b-90) - yr;
+        const tL = maj ? tLg*0.6 : tSm, dx = Math.cos(a), dy = Math.sin(a);
         ctx.beginPath();
-        ctx.moveTo(cx + dx * touter,         cy + dy * touter);
-        ctx.lineTo(cx + dx * (touter - tL),  cy + dy * (touter - tL));
+        ctx.moveTo(cx+dx*touter, cy+dy*touter);
+        ctx.lineTo(cx+dx*(touter-tL), cy+dy*(touter-tL));
         ctx.strokeStyle = maj ? 'rgba(140,148,170,0.65)' : 'rgba(140,148,170,0.30)';
-        ctx.lineWidth   = 1;
-        ctx.stroke();
+        ctx.lineWidth = 1; ctx.stroke();
     }
-
-    // Heading marker — small white triangle, fixed at 12 o'clock, pointing inward
-    const hTip  = cy - touter + 1;
-    const hBase = cy - touter + tLg * 0.95;
-    const hHalf = tSm * 0.65;
-    ctx.beginPath();
-    ctx.moveTo(cx,         hTip);
-    ctx.lineTo(cx - hHalf, hBase);
-    ctx.lineTo(cx + hHalf, hBase);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.fill();
+    const hTip  = cy - touter + 1, hBase = cy - touter + tLg*0.95, hHalf = tSm*0.65;
+    ctx.beginPath(); ctx.moveTo(cx,hTip); ctx.lineTo(cx-hHalf,hBase); ctx.lineTo(cx+hHalf,hBase);
+    ctx.closePath(); ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fill();
 }
 
-/* ─── animation loop ────────────────────────────────────── */
-let prev   = 0;
-let animT  = 0;
+/* ═══════════════════════════════════════════════════════════════════════════
+   PFD RENDERER
+   ═══════════════════════════════════════════════════════════════════════════ */
+function drawPFD(ctx, W, H, noClear) {
+    const pitch = P.pitch, roll = P.roll, speedMs = P.speedMs, altM = S.altM;
+    const MAX_PITCH = 30;
+    const R       = Math.min(W*0.32, H*0.44);
+    const CX = W*0.5, CY = H*0.5;
+    const StripW   = W*0.155;
+    const StripGap = W*0.028;
+    const LabelH   = R * 0.10;
+    const StripTop = CY - R + LabelH;
+    const StripH   = R*2 - LabelH;
+
+    // positive pitch = nose up = horizon shifts down
+    const PO  = clamp((pitch / MAX_PITCH) * R * 0.85, -R*0.97, R*0.97);
+    const RR  = deg(roll);
+    const cosR = Math.cos(RR), sinR = Math.sin(RR);
+    const HY  = CY + PO; // horizon y (screen)
+
+    if (!noClear) ctx.clearRect(0, 0, W, H);
+
+    /* ── panel background ── */
+    ctx.fillStyle = 'rgba(8,10,16,0.95)';
+    ctx.fillRect(0, 0, W, H);
+
+    /* ── circle clip: sky / earth fill ── */
+    ctx.save();
+    ctx.beginPath(); ctx.arc(CX, CY, R, 0, 2*Math.PI); ctx.clip();
+
+    // earth (full circle bg)
+    ctx.fillStyle = '#6e4416'; ctx.fillRect(0, 0, W, H);
+
+    // sky half - fill polygon on the sky side of the horizon line
+    // sky normal (from earth → sky): (sinR, -cosR)
+    // horizon tangent: (cosR, sinR)
+    {
+        const ext = R * 2.5;
+        const tnx = cosR, tny = sinR; // tangent
+        const snx = sinR, sny = -cosR; // sky normal (up direction)
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(HY * (-tny) + CX - tnx*ext,  HY * 1 + tny === 0 ? HY : CX);
+        // Build sky polygon: p1 and p2 on horizon ± tangent, extended in sky direction
+        const p1x = CX - tnx*ext, p1y = HY - tny*ext;
+        const p2x = CX + tnx*ext, p2y = HY + tny*ext;
+        ctx.moveTo(p1x, p1y);
+        ctx.lineTo(p2x, p2y);
+        ctx.lineTo(p2x + snx*ext*2, p2y + sny*ext*2);
+        ctx.lineTo(p1x + snx*ext*2, p1y + sny*ext*2);
+        ctx.closePath();
+        ctx.fillStyle = '#376eaf'; ctx.fill();
+        ctx.restore();
+    }
+
+    /* ── horizon line ── */
+    const Ext = R*1.1;
+    ctx.beginPath();
+    ctx.moveTo(CX - Ext*cosR, HY - Ext*sinR);
+    ctx.lineTo(CX + Ext*cosR, HY + Ext*sinR);
+    ctx.strokeStyle = 'rgba(255,255,255,1)'; ctx.lineWidth = 2; ctx.stroke();
+
+    /* ── pitch ladder ── */
+    for (const angle of [-20,-10,-5,5,10,20]) {
+        const frac     = (angle / MAX_PITCH) * R * 0.85;
+        const lcx      = CX + frac * sinR;
+        const lcy      = HY - frac * cosR;
+        const lineHalf = Math.abs(angle) >= 10 ? R*0.28 : R*0.15;
+        const lx = lcx - lineHalf*cosR, ly = lcy - lineHalf*sinR;
+        const rx = lcx + lineHalf*cosR, ry = lcy + lineHalf*sinR;
+        ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(rx, ry);
+        ctx.strokeStyle = 'rgba(220,220,220,0.85)'; ctx.lineWidth = 1; ctx.stroke();
+        if (Math.abs(angle) >= 10) {
+            ctx.fillStyle = 'rgba(220,220,220,0.85)';
+            ctx.font = `${Math.max(6, Math.round(R * 0.048))}px 'Segoe UI', sans-serif`;
+            ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+            ctx.fillText(Math.abs(angle), lx - 3, ly - 4*sinR);
+        }
+    }
+
+    /* ── fixed aircraft reference ── */
+    ctx.strokeStyle = 'rgba(255,215,40,0.95)'; ctx.lineWidth = 2;
+    const wl = R*0.22;
+    ctx.beginPath(); ctx.moveTo(CX-wl-6, CY); ctx.lineTo(CX-6, CY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(CX+6, CY); ctx.lineTo(CX+wl+6, CY); ctx.stroke();
+    ctx.beginPath(); ctx.arc(CX, CY, 2.5, 0, 2*Math.PI);
+    ctx.fillStyle = 'rgba(255,215,40,0.95)'; ctx.fill();
+
+    ctx.restore(); // end circle clip
+
+    /* ── roll arc + ticks ── */
+    const ArcOuter = R + R*0.085;
+    const ArcSpan  = 150, kSegs = 40;
+    ctx.beginPath();
+    for (let i = 0; i <= kSegs; i++) {
+        const a = deg(-90 - ArcSpan*0.5 + ArcSpan*i/kSegs);
+        const x = CX + ArcOuter*Math.cos(a), y = CY + ArcOuter*Math.sin(a);
+        if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle = 'rgba(80,85,110,0.80)'; ctx.lineWidth = 1; ctx.stroke();
+
+    for (const td of [-60,-45,-30,-20,-10,0,10,20,30,45,60]) {
+        const a = deg(-90 + td);
+        const isMaj = Math.abs(td) % 30 === 0 || td === 0;
+        const tl = isMaj ? R*0.09 : R*0.05;
+        ctx.beginPath();
+        ctx.moveTo(CX+(ArcOuter-tl)*Math.cos(a), CY+(ArcOuter-tl)*Math.sin(a));
+        ctx.lineTo(CX+ArcOuter*Math.cos(a), CY+ArcOuter*Math.sin(a));
+        ctx.strokeStyle = 'rgba(80,85,110,0.80)'; ctx.lineWidth = 1.2; ctx.stroke();
+    }
+
+    // Roll indicator triangle
+    {
+        const ia = deg(-90 + roll);
+        const IndR = ArcOuter + R*0.06, IndBase = ArcOuter + R*0.01, IndHalf = R*0.04;
+        const tipX = CX + IndR*Math.cos(ia), tipY = CY + IndR*Math.sin(ia);
+        const px = -Math.sin(ia), py = Math.cos(ia);
+        const bcX = CX + IndBase*Math.cos(ia), bcY = CY + IndBase*Math.sin(ia);
+        ctx.beginPath();
+        ctx.moveTo(tipX, tipY);
+        ctx.lineTo(bcX + px*IndHalf, bcY + py*IndHalf);
+        ctx.lineTo(bcX - px*IndHalf, bcY - py*IndHalf);
+        ctx.closePath();
+        ctx.strokeStyle = 'rgba(255,255,255,1)'; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+
+    /* ── circle border ── */
+    ctx.beginPath(); ctx.arc(CX, CY, R, 0, 2*Math.PI);
+    ctx.strokeStyle = 'rgba(80,85,110,0.80)'; ctx.lineWidth = 2; ctx.stroke();
+
+    /* ── tapes ──
+       isLeft=true  → speed tape: inner edge = tapeR (faces circle), labels on outer left
+       isLeft=false → alt tape:   inner edge = tapeL (faces circle), labels on outer right
+       The tape is split: outer 45% = labels, inner 55% = value box — no overlap possible. */
+    function drawTape(tapeL, tapeR, value, rangeHalf, stepMinor, stepMajor, isLeft) {
+        const tapeW = tapeR - tapeL;
+        const split = isLeft ? tapeL + tapeW*0.45 : tapeL + tapeW*0.55;
+
+        ctx.fillStyle = 'rgba(18,20,28,0.88)';
+        ctx.fillRect(tapeL, StripTop, tapeW, StripH);
+
+        const pixPerUnit = StripH / (rangeHalf*2);
+        const v0 = Math.ceil ((value - rangeHalf) / stepMinor) * stepMinor;
+        const v1 = Math.floor((value + rangeHalf) / stepMinor) * stepMinor;
+
+        for (let v = v0; v <= v1 + 0.001; v += stepMinor) {
+            const y = CY - (v - value)*pixPerUnit;
+            if (y < StripTop || y > StripTop+StripH) continue;
+            const isMaj = Math.abs(v % stepMajor) < stepMinor*0.1;
+            const tickLen = isMaj ? tapeW*0.50 : tapeW*0.28;
+            ctx.beginPath();
+            if (isLeft) {
+                ctx.moveTo(tapeR - tickLen, y); ctx.lineTo(tapeR, y);
+            } else {
+                ctx.moveTo(tapeL, y); ctx.lineTo(tapeL + tickLen, y);
+            }
+            ctx.strokeStyle = isMaj ? 'rgba(220,220,220,0.85)' : 'rgba(160,160,160,0.55)';
+            ctx.lineWidth = 1; ctx.stroke();
+            if (isMaj) {
+                ctx.fillStyle = 'rgba(170,175,190,0.85)';
+                ctx.font = `${Math.max(7, Math.round(R * 0.058))}px 'Consolas', monospace`;
+                ctx.textBaseline = 'middle';
+                const lblInset = tapeW * 0.08;
+                if (isLeft) {
+                    ctx.textAlign = 'left';
+                    ctx.fillText(Math.round(v), tapeL + lblInset, y);
+                } else {
+                    ctx.textAlign = 'right';
+                    ctx.fillText(Math.round(v), tapeR - lblInset, y);
+                }
+            }
+        }
+
+        // Value box — inner half only, clear of labels
+        const bh = StripH*0.11;
+        const boxL = isLeft ? split : tapeL + 1;
+        const boxR = isLeft ? tapeR - 1 : split;
+        ctx.fillStyle = 'rgba(55,95,155,1)';
+        ctx.fillRect(boxL, CY - bh/2, boxR - boxL, bh);
+        ctx.fillStyle = 'rgba(230,230,230,1)';
+        ctx.font = `bold ${Math.max(8, Math.round(R * 0.068))}px 'Consolas', monospace`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(value.toFixed(1), (boxL + boxR)/2, CY);
+    }
+
+    const SpeedR = CX - R - StripGap, SpeedL = SpeedR - StripW;
+    const AltL   = CX + R + StripGap, AltR   = AltL + StripW;
+    drawTape(SpeedL, SpeedR, speedMs, 8,  1,  5,  true);
+    drawTape(AltL,   AltR,   altM,   40, 5, 20, false);
+
+    ctx.fillStyle = 'rgba(190,195,210,0.80)';
+    ctx.font = `bold ${Math.max(8, Math.round(R * 0.068))}px 'Segoe UI', sans-serif`;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillText('SPD m/s', SpeedL, StripTop - LabelH * 0.15);
+    ctx.fillText('ALT m',   AltL,   StripTop - LabelH * 0.15);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CROSSHAIR RENDERER  (scale > 1 to make it visible in the studio preview)
+   ═══════════════════════════════════════════════════════════════════════════ */
+function drawCrosshair(ctx, W, H, scale, noClear) {
+    if (!noClear) ctx.clearRect(0, 0, W, H);
+    const cx = W/2, cy = H/2;
+    const ll = X.lineLength  * scale;
+    const lg = X.lineGap     * scale;
+    const lt = X.lineThickness * scale;
+    const dr = X.dotRadius   * scale;
+    const cr = X.chaseCircleR * scale;
+
+    function line(x1,y1,x2,y2,col,thick) {
+        ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+        ctx.strokeStyle = col; ctx.lineWidth = thick; ctx.stroke();
+    }
+
+    if (X.fpv) {
+        const col = 'rgba(230,230,230,0.85)';
+        line(cx,        cy-lg-ll, cx,        cy-lg,    col, lt);
+        line(cx,        cy+lg,    cx,        cy+lg+ll, col, lt);
+        line(cx-lg-ll,  cy,       cx-lg,     cy,       col, lt);
+        line(cx+lg,     cy,       cx+lg+ll,  cy,       col, lt);
+        ctx.beginPath();
+        for (let i = 0; i <= 12; i++) {
+            const a = 2*Math.PI*i/12;
+            const px = cx + dr*Math.cos(a), py = cy + dr*Math.sin(a);
+            if (i === 0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+        }
+        ctx.closePath(); ctx.strokeStyle = col; ctx.lineWidth = lt; ctx.stroke();
+    } else {
+        const col = 'rgba(180,180,180,0.50)';
+        ctx.beginPath(); ctx.arc(cx, cy, cr, 0, 2*Math.PI);
+        ctx.strokeStyle = col; ctx.lineWidth = lt; ctx.stroke();
+        line(cx-3*scale, cy, cx+3*scale, cy, col, lt);
+        line(cx, cy-3*scale, cx, cy+3*scale, col, lt);
+    }
+}
+
+function toggleDrone() {
+    showDrone = !showDrone;
+    document.getElementById('t-drone').classList.toggle('on', showDrone);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DRONE SILHOUETTE  — chase-cam rear view, X-frame quadrotor
+   ═══════════════════════════════════════════════════════════════════════════ */
+function drawDroneSilhouette(ctx, W, H) {
+    /* Drone center: horizontally centred, slightly above mid-screen.
+       In a chase cam the drone sits ~40-45 % down — above the PFD, below
+       the sky horizon, with the crosshair overlapping its lower body. */
+    const cx  = W * 0.50;
+    const cy  = H * 0.43;
+    const arm = W * 0.072; // half arm-length in px
+
+    /* Arm tip positions — rear-view perspective:
+       front arms are farther (smaller, higher, slightly closer together)
+       rear  arms are closer (larger, lower, slightly more spread)          */
+    const tips = [
+        { x: cx - arm*0.70, y: cy - arm*0.52, r: arm*0.27, w: W*0.0028 }, // front-L
+        { x: cx + arm*0.70, y: cy - arm*0.52, r: arm*0.27, w: W*0.0028 }, // front-R
+        { x: cx - arm*0.78, y: cy + arm*0.60, r: arm*0.31, w: W*0.0038 }, // rear-L
+        { x: cx + arm*0.78, y: cy + arm*0.60, r: arm*0.31, w: W*0.0038 }, // rear-R
+    ];
+
+    ctx.save();
+
+    /* ambient glow under drone */
+    const glow = ctx.createRadialGradient(cx, cy + arm*0.25, 0, cx, cy + arm*0.25, arm*2.0);
+    glow.addColorStop(0, 'rgba(40,100,220,0.18)');
+    glow.addColorStop(1, 'rgba(40,100,220,0)');
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + arm*0.25, arm*2.0, arm*1.25, 0, 0, 2*Math.PI);
+    ctx.fillStyle = glow; ctx.fill();
+
+    /* bounding-box footprint — dashed, very faint */
+    const bw = arm*2.2, bh = arm*1.55;
+    ctx.beginPath();
+    ctx.rect(cx - bw/2, cy - bh/2 + arm*0.04, bw, bh);
+    ctx.setLineDash([3, 7]);
+    ctx.strokeStyle = 'rgba(70,120,210,0.28)';
+    ctx.lineWidth = 1; ctx.stroke();
+    ctx.setLineDash([]);
+
+    /* arms */
+    for (const t of tips) {
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(t.x, t.y);
+        ctx.strokeStyle = 'rgba(130,168,215,0.82)';
+        ctx.lineWidth = t.w; ctx.lineCap = 'round'; ctx.stroke();
+    }
+
+    /* rotor discs + spinning blade (front pair and rear pair counter-rotate) */
+    for (let i = 0; i < tips.length; i++) {
+        const t   = tips[i];
+        const dir = i < 2 ? 1 : -1;
+        const phi = animT * 9 * dir;
+        const ry  = 0.30; // vertical squash for tilt perspective
+
+        /* disc */
+        ctx.beginPath();
+        ctx.ellipse(t.x, t.y, t.r, t.r * ry, 0, 0, 2*Math.PI);
+        ctx.fillStyle   = 'rgba(50,95,195,0.18)'; ctx.fill();
+        ctx.strokeStyle = 'rgba(100,165,255,0.55)'; ctx.lineWidth = 1.2; ctx.stroke();
+
+        /* blade sweep */
+        ctx.beginPath();
+        ctx.moveTo(t.x + Math.cos(phi)*t.r*0.92,          t.y + Math.sin(phi)*t.r*ry*0.92);
+        ctx.lineTo(t.x + Math.cos(phi+Math.PI)*t.r*0.92,  t.y + Math.sin(phi+Math.PI)*t.r*ry*0.92);
+        ctx.strokeStyle = 'rgba(140,205,255,0.38)';
+        ctx.lineWidth = 1.8; ctx.stroke();
+    }
+
+    /* central body plate */
+    const bpW = arm*0.20, bpH = arm*0.14;
+    ctx.fillStyle   = 'rgba(45,70,145,0.68)';
+    ctx.strokeStyle = 'rgba(100,165,255,0.88)';
+    ctx.lineWidth   = 1.5;
+    ctx.beginPath();
+    ctx.rect(cx - bpW, cy - bpH, bpW*2, bpH*2);
+    ctx.fill(); ctx.stroke();
+
+    /* camera lens (forward-facing, visible from behind) */
+    const lensR = bpW*0.38;
+    ctx.beginPath(); ctx.arc(cx, cy - bpH*0.15, lensR, 0, 2*Math.PI);
+    ctx.fillStyle   = 'rgba(15,25,55,0.92)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(75,140,225,0.72)'; ctx.lineWidth = 1; ctx.stroke();
+    /* inner highlight */
+    ctx.beginPath(); ctx.arc(cx - lensR*0.28, cy - bpH*0.40, lensR*0.28, 0, 2*Math.PI);
+    ctx.fillStyle = 'rgba(150,210,255,0.32)'; ctx.fill();
+
+    /* rear LEDs — red port (left), green starboard (right) */
+    const ledY = cy + bpH*0.72;
+    const rp = 0.55 + 0.45*Math.sin(animT*2.8);
+    const gp = 0.55 + 0.45*Math.sin(animT*2.8 + Math.PI);
+    ctx.beginPath(); ctx.arc(cx - bpW*0.6, ledY, 2.8, 0, 2*Math.PI);
+    ctx.fillStyle = `rgba(255,55,55,${rp.toFixed(2)})`; ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + bpW*0.6, ledY, 2.8, 0, 2*Math.PI);
+    ctx.fillStyle = `rgba(50,225,80,${gp.toFixed(2)})`; ctx.fill();
+
+    /* "DRONE" label — subtle, layout-guide only */
+    ctx.fillStyle    = 'rgba(80,130,210,0.42)';
+    ctx.font         = `${Math.max(9, W*0.0068)}px 'Segoe UI', sans-serif`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('DRONE', cx, cy + bh/2 + arm*0.05 + 4);
+
+    ctx.restore();
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FULL HUD RENDERER  — composites all three components
+   ═══════════════════════════════════════════════════════════════════════════ */
+function drawFullHUD(ctx, W, H) {
+    ctx.clearRect(0, 0, W, H);
+
+    /* game-world background */
+    const bgHorizon = H * 0.42 - (P.pitch / 30) * H * 0.20;
+    const skyG = ctx.createLinearGradient(0, 0, 0, bgHorizon);
+    skyG.addColorStop(0, '#04080f'); skyG.addColorStop(1, '#09131e');
+    ctx.fillStyle = skyG; ctx.fillRect(0, 0, W, bgHorizon);
+    const gndG = ctx.createLinearGradient(0, bgHorizon, 0, H);
+    gndG.addColorStop(0, '#100d08'); gndG.addColorStop(1, '#060504');
+    ctx.fillStyle = gndG; ctx.fillRect(0, bgHorizon, W, H - bgHorizon);
+    ctx.beginPath(); ctx.moveTo(0, bgHorizon); ctx.lineTo(W, bgHorizon);
+    ctx.strokeStyle = 'rgba(80,120,180,0.12)'; ctx.lineWidth = 1; ctx.stroke();
+
+    /* drone silhouette — only in chase mode; FPV looks through the drone camera */
+    if (showDrone && !X.fpv) drawDroneSilhouette(ctx, W, H);
+
+    /* shared bottom row — align visual circle bottoms to the same screen Y */
+    const mmSize     = Math.round(Math.min(W * 0.32, H * 0.52));
+    const mmMargin   = Math.round(Math.min(W, H) * 0.018);
+    const pfdW       = Math.round(W * 0.32), pfdH = Math.round(H * 0.42);
+    const bottomEdge = H - mmMargin;
+
+    const R_pfd = Math.min(pfdW * 0.32, pfdH * 0.44);
+    const R_mm  = (mmSize / 2) * 0.78 - 2;
+
+    const mmX  = mmMargin;  // left corner
+    const mmY  = Math.round(bottomEdge - (mmSize / 2 + R_mm) + H * 0.02);
+    const mmOff = new OffscreenCanvas(mmSize, mmSize);
+    drawMinimap(mmOff.getContext('2d'), mmSize, mmSize, false);
+    ctx.drawImage(mmOff, mmX, mmY);
+
+    const pfdX = Math.round((W - pfdW) / 2);
+    const pfdY = Math.round(bottomEdge - (pfdH / 2 + R_pfd));
+    const pfdOff = new OffscreenCanvas(pfdW, pfdH);
+    drawPFD(pfdOff.getContext('2d'), pfdW, pfdH, false);
+    ctx.drawImage(pfdOff, pfdX, pfdY);
+
+    /* crosshair — only in FPV mode (chase mode uses the drone body as reference) */
+    if (X.fpv) drawCrosshair(ctx, W, H, 1, true);
+}
+
+/* ─── animation loop ─────────────────────────────────────────────────────── */
+let prev = 0, animT = 0;
 function frame(t) {
-    const dt = Math.min((t - prev) / 1000, 0.05);
-    prev   = t;
-    animT += dt;
+    const dt = Math.min((t - prev)/1000, 0.05);
+    prev = t; animT += dt;
 
     if (animOn.heading) {
-        S.yawDeg = (S.yawDeg + 30 * dt) % 360;
+        S.yawDeg = (S.yawDeg + 30*dt) % 360;
         const el = document.getElementById('s-yaw');
-        el.value = S.yawDeg.toFixed(1);
+        if (el) el.value = S.yawDeg.toFixed(1);
         document.getElementById('v-yaw').textContent = Math.round(S.yawDeg) + '°';
     }
     if (animOn.target) {
-        S.tgtBear = (S.tgtBear + 20 * dt) % 360;
+        S.tgtBear = (S.tgtBear + 20*dt) % 360;
         const el = document.getElementById('s-tb');
-        el.value = S.tgtBear.toFixed(1);
+        if (el) el.value = S.tgtBear.toFixed(1);
         document.getElementById('v-tb').textContent = Math.round(S.tgtBear) + '°';
     }
+    if (animOn.demo) {
+        P.pitch = 12 * Math.sin(animT * 0.65);
+        P.roll  = 18 * Math.sin(animT * 0.40);
+        S.yawDeg = (S.yawDeg + 22*dt) % 360;
+        if (!animOn.target) S.tgtBear = (S.tgtBear + 14*dt) % 360;
+    }
 
-    draw(CV.getContext('2d'), CV.width, CV.height);
-
-    document.getElementById('statusbar').textContent =
-        `ALT ${Math.round(S.altM)} m  ·  YAW ${Math.round(S.yawDeg)}°  ·  FOV ${Math.round(S.fovDeg)}°  ·  DET ${Math.round(S.detM)} m`;
+    if (activeTab === 'minimap') {
+        drawMinimap(CV.getContext('2d'), CV.width, CV.height, false);
+        document.getElementById('statusbar').textContent =
+            `ALT ${Math.round(S.altM)} m  ·  YAW ${Math.round(S.yawDeg)}°  ·  FOV ${Math.round(S.fovDeg)}°  ·  DET ${Math.round(S.detM)} m`;
+    } else if (activeTab === 'pfd') {
+        drawPFD(CV.getContext('2d'), CV.width, CV.height, false);
+        document.getElementById('statusbar').textContent =
+            `PITCH ${P.pitch.toFixed(1)}°  ·  ROLL ${P.roll.toFixed(1)}°  ·  SPD ${P.speedMs.toFixed(1)} m/s  ·  ALT ${Math.round(S.altM)} m`;
+    } else if (activeTab === 'crosshair') {
+        const ctx = CV.getContext('2d');
+        ctx.clearRect(0, 0, CV.width, CV.height);
+        drawCrosshair(ctx, CV.width, CV.height, 4, true);
+        document.getElementById('statusbar').textContent =
+            `MODE ${X.fpv ? 'FPV' : 'Chase'}  ·  LL ${X.lineLength}  ·  LG ${X.lineGap}  ·  R ${X.dotRadius}`;
+    } else if (activeTab === 'fullhud') {
+        if (HUD_CV.width > 0 && HUD_CV.height > 0)
+            drawFullHUD(HUD_CV.getContext('2d'), HUD_CV.width, HUD_CV.height);
+        document.getElementById('statusbar').textContent =
+            `ALT ${Math.round(S.altM)} m  ·  YAW ${Math.round(S.yawDeg)}°  ·  PITCH ${P.pitch.toFixed(1)}°  ·  ROLL ${P.roll.toFixed(1)}°`;
+    }
 
     requestAnimationFrame(frame);
 }

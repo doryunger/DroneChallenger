@@ -1,4 +1,6 @@
 #include "TargetPawn.h"
+#include "DroneHUD.h"
+#include "DroneHUDServer.h"
 #include "TargetAIController.h"
 #include "PatrolPath.h"
 #include "Windows/WindowsHWrapper.h"
@@ -28,6 +30,7 @@ THIRD_PARTY_INCLUDES_START
 #include "bt/DecisionEmitter.h"
 #include "bt/MonitorServer.h"
 #include "bt/SchemaLoader.h"
+#include "bt/SchemaParser.h"
 #include "bt/Status.h"
 THIRD_PARTY_INCLUDES_END
 
@@ -104,9 +107,15 @@ ATargetPawn::ATargetPawn()
 
 ATargetPawn::~ATargetPawn()
 {
-	if (Monitor) { Monitor->stop(); delete Monitor; Monitor = nullptr; }
+	if (Monitor)    { Monitor->stop(); delete Monitor; Monitor = nullptr; }
+	if (HUDServer)  { HUDServer->Shutdown(); delete HUDServer; HUDServer = nullptr; }
 	delete Tree;    Tree    = nullptr;
 	delete Emitter; Emitter = nullptr;
+}
+
+bool ATargetPawn::IsHUDServerRunning() const
+{
+	return HUDServer != nullptr && HUDServer->IsRunning();
 }
 
 void ATargetPawn::BeginPlay()
@@ -118,16 +127,10 @@ void ATargetPawn::BeginPlay()
 
 	Mesh->SetRelativeScale3D(FVector(1.5f, 1.5f, 1.5f));
 
-	// Position beacon pole so it spans 0–100 m above the car.
-	// bAbsoluteScale is true so pole scale ignores parent, but position is still
-	// in parent-local space — divide by mesh scale to get the right world offset.
 	static constexpr float RuntimeMeshScale = 1.5f;
-	static constexpr float BeaconCenterM    = 50.0f;   // midpoint of 100 m pole
+	static constexpr float BeaconCenterM    = 50.0f;
 	BeaconPole->SetRelativeLocation(FVector(0.0f, 0.0f, BeaconCenterM * 100.0f / RuntimeMeshScale));
 
-	// Record the drone's editor-placed position. Tiles are guaranteed loaded here because
-	// the camera starts at this location. The drone stays here while placement runs —
-	// no aerial waiting state for the player.
 	DroneEditorPos = IsValid(CachedDrone)
 		? CachedDrone->GetActorLocation()
 		: GetActorLocation();
@@ -144,6 +147,26 @@ void ATargetPawn::BeginPlay()
 
 			GetWorldTimerManager().SetTimer(
 				PlacementTimer, this, &ATargetPawn::TryInitialPlacement, 1.0f, true);
+
+			WriteGraphDataJS();
+
+			const FString UiDir = FPaths::ConvertRelativePathToFull(
+				FPaths::ProjectDir() / TEXT("HUD"));
+			HUDServer = new FDroneHUDServer(UiDir);
+			if (HUDServer->Start(8081))
+			{
+				if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+				{
+					if (ADroneHUD* HUD = Cast<ADroneHUD>(PC->GetHUD()))
+						HUD->NotifyHUDServerReady();
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("TargetPawn: HUD server failed to bind 8081 — retrying in 2 s"));
+				GetWorldTimerManager().SetTimer(HUDServerRetryTimer, this,
+					&ATargetPawn::RetryHUDServer, 2.0f, false);
+			}
 		}
 		else
 		{
@@ -155,6 +178,84 @@ void ATargetPawn::BeginPlay()
 		(Mesh && Mesh->GetStaticMesh()) ? TEXT("yes") : TEXT("NO — car will be invisible"));
 
 	BuildTree();
+}
+
+static std::string SerializeSchemaNode(const bt::SchemaNode& n)
+{
+    const char* type = "Action";
+    switch (n.type)
+    {
+        case bt::SchemaNodeType::SEQUENCE:  type = "Sequence";  break;
+        case bt::SchemaNodeType::SELECTOR:  type = "Selector";  break;
+        case bt::SchemaNodeType::CONDITION: type = "Condition"; break;
+        case bt::SchemaNodeType::PARALLEL:  type = "Parallel";  break;
+        default: break;
+    }
+    std::string out = "{\"name\":\"" + n.name + "\",\"type\":\"" + type + "\",\"children\":[";
+    for (size_t i = 0; i < n.children.size(); ++i)
+    {
+        if (i > 0) out += ',';
+        out += SerializeSchemaNode(*n.children[i]);
+    }
+    return out + "]}";
+}
+
+static std::string SerializeSchemaDoc(const bt::SchemaDoc& doc)
+{
+    std::string out = "{\"name\":\"" + doc.subtreeName + "\",\"type\":\"Selector\",\"children\":[";
+    for (size_t i = 0; i < doc.behaviors.size(); ++i)
+    {
+        if (i > 0) out += ',';
+        const auto& beh = doc.behaviors[i];
+        out += "{\"name\":\"" + beh.name + "\",\"type\":\"Sequence\",\"children\":[";
+        bool first = true;
+        if (!beh.condition.empty())
+        {
+            out += "{\"name\":\"" + beh.condition + "\",\"type\":\"Condition\",\"children\":[]}";
+            first = false;
+        }
+        if (beh.tree)
+        {
+            if (!first) out += ',';
+            out += SerializeSchemaNode(*beh.tree);
+        }
+        out += "]}";
+    }
+    return out + "]}";
+}
+
+static FString SerializeHistory(const std::deque<bt::TickRecord>& history)
+{
+    std::string out;
+    out.reserve(4096);
+    out += '[';
+    bool first = true;
+    for (const auto& rec : history)
+    {
+        if (!first) out += ',';
+        first = false;
+        out += "{\"tick\":";
+        out += std::to_string(rec.tickNumber);
+        out += ",\"behavior\":\"";
+        out += rec.behaviorName;
+        out += "\",\"status\":\"";
+        out += std::string(bt::toString(rec.result));
+        out += "\",\"activePath\":[";
+        bool firstAP = true;
+        for (const auto& ap : rec.activePath)
+        {
+            if (!firstAP) out += ',';
+            firstAP = false;
+            out += "{\"name\":\"";
+            out += ap.name;
+            out += "\",\"status\":\"";
+            out += std::string(bt::toString(ap.status));
+            out += "\"}";
+        }
+        out += "]}";
+    }
+    out += ']';
+    return UTF8_TO_TCHAR(out.c_str());
 }
 
 void ATargetPawn::Tick(float DeltaTime)
@@ -179,6 +280,33 @@ void ATargetPawn::Tick(float DeltaTime)
 			CarPos.Z, LonLatH.X, LonLatH.Y, LonLatH.Z, DistToDrone);
 	}
 
+	// Push live state to HUD server every frame regardless of placement
+	if (HUDServer && CachedDrone)
+	{
+		const FVector DronePos = CachedDrone->GetActorLocation();
+		const FVector TargPos  = GetActorLocation();
+
+		FVector DroneLonLatH(0, 0, 0);
+		FVector TargLonLatH(0, 0, 0);
+		if (CachedGeoreference)
+		{
+			DroneLonLatH = CachedGeoreference->TransformUnrealPositionToLongitudeLatitudeHeight(DronePos);
+			TargLonLatH  = CachedGeoreference->TransformUnrealPositionToLongitudeLatitudeHeight(TargPos);
+		}
+
+		FHUDState HS;
+		HS.DroneX      = DronePos.X;
+		HS.DroneY      = DronePos.Y;
+		HS.DroneZ      = DronePos.Z;
+		HS.DroneYaw    = CachedDrone->GetActorRotation().Yaw;
+		HS.AltM        = FMath::Max(DroneLonLatH.Z - TargLonLatH.Z, 0.f);
+		HS.TargetX     = TargPos.X;
+		HS.TargetY     = TargPos.Y;
+		HS.TargetZ     = TargPos.Z;
+		HS.bTargetInFOV = bDroneInFOV;
+		HUDServer->SetState(HS);
+	}
+
 	if (!bPlacementDone || !Tree) return;
 
 	LastDeltaTime = DeltaTime;
@@ -191,6 +319,8 @@ void ATargetPawn::Tick(float DeltaTime)
 	}
 	bWasInFOV = bDroneInFOV;
 	Tree->tick();
+	if (HUDServer && Emitter && !Emitter->history().empty())
+		HUDServer->SetBTHistoryJson(SerializeHistory(Emitter->history()));
 }
 
 void ATargetPawn::BuildTree()
@@ -350,17 +480,36 @@ void ATargetPawn::BuildTree()
 	Reg.conditions["drone_in_capture_range"] = [this]() { return bDroneInCaptureRange; };
 
 	std::string YamlStr(TCHAR_TO_UTF8(*YamlContent));
-	bt::BehaviorTree Loaded = bt::SchemaLoader::load(YamlStr, Reg);
+	bt::SchemaDoc Doc = bt::SchemaParser::parse(YamlStr);
+	if (HUDServer)
+		HUDServer->SetBTTreeJson(UTF8_TO_TCHAR(SerializeSchemaDoc(Doc).c_str()));
+	bt::BehaviorTree Loaded = bt::SchemaLoader::load(Doc, Reg);
 	Tree = new bt::BehaviorTree(std::move(Loaded));
 
 	delete Emitter;
 	Emitter = new bt::DecisionEmitter(32);
 	Tree->setEmitter(Emitter);
 
-	if (Monitor) { Monitor->stop(); delete Monitor; }
-	const std::string UiDir = TCHAR_TO_UTF8(*(FPaths::ProjectDir() / TEXT("ArboristUI")));
-	Monitor = new bt::MonitorServer(*Tree, *Emitter, UiDir);
-	Monitor->start(8080);
+}
+
+void ATargetPawn::RetryHUDServer()
+{
+	if (!HUDServer || HUDServer->IsRunning()) return;
+	if (HUDServer->Start(8081))
+	{
+		UE_LOG(LogTemp, Log, TEXT("TargetPawn: HUD server bound on retry"));
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		{
+			if (ADroneHUD* HUD = Cast<ADroneHUD>(PC->GetHUD()))
+				HUD->NotifyHUDServerReady();
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TargetPawn: HUD server retry failed — trying again in 2 s"));
+		GetWorldTimerManager().SetTimer(HUDServerRetryTimer, this,
+			&ATargetPawn::RetryHUDServer, 2.0f, false);
+	}
 }
 
 void ATargetPawn::UpdateDroneState()
@@ -460,6 +609,47 @@ void ATargetPawn::PlaceDroneNearCar(const FVector& CarPos, const FVector& CarFor
 
 	UE_LOG(LogTemp, Log, TEXT("TargetPawn: drone placed at (%.0f, %.0f, %.0f)"),
 		Behind.X, Behind.Y, Behind.Z);
+}
+
+void ATargetPawn::WriteGraphDataJS()
+{
+	FString Out;
+	Out.Reserve(Graph.NodeIds.Num() * 40 + Graph.Adjacency.Num() * 15);
+	Out += TEXT("const GRAPH_NODES={");
+	bool bFirstNode = true;
+	for (const int32 Id : Graph.NodeIds)
+	{
+		const FVector* P = Graph.NodeWorldPos.Find(Id);
+		if (!P) continue;
+		if (!bFirstNode) Out += TEXT(",");
+		Out += FString::Printf(TEXT("%d:[%.0f,%.0f,%.0f]"), Id, P->X, P->Y, P->Z);
+		bFirstNode = false;
+	}
+	Out += TEXT("};\nconst GRAPH_EDGES=[");
+	bool bFirstEdge = true;
+	for (const auto& [From, Neighbors] : Graph.Adjacency)
+	{
+		for (const int32 To : Neighbors)
+		{
+			if (To <= From) continue;
+			if (!bFirstEdge) Out += TEXT(",");
+			Out += FString::Printf(TEXT("[%d,%d]"), From, To);
+			bFirstEdge = false;
+		}
+	}
+	Out += TEXT("];");
+
+	const FString OutPath = FPaths::ConvertRelativePathToFull(
+		FPaths::ProjectDir() / TEXT("HUD/minimap/munich_graph.js"));
+	if (FFileHelper::SaveStringToFile(Out, *OutPath))
+	{
+		UE_LOG(LogTemp, Log, TEXT("TargetPawn: wrote munich_graph.js (%d nodes) to %s"),
+			Graph.NodeIds.Num(), *OutPath);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("TargetPawn: failed to write munich_graph.js to %s"), *OutPath);
+	}
 }
 
 void ATargetPawn::TryInitialPlacement()

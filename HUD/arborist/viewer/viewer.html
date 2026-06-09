@@ -4,12 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DroneChallenger — BT</title>
-<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 <style>
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    background: #1e1e2e;
+    background: #13141f;
     color: #cdd6f4;
     font-family: 'SF Mono', 'Fira Code', monospace;
     display: flex; flex-direction: column; height: 100vh; overflow: hidden;
@@ -33,6 +32,7 @@
   #scrubber-row {
     padding: 5px 14px;
     display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid #252538;
   }
   .ctrl-btn {
     background: #313244; border: none; color: #cdd6f4;
@@ -45,21 +45,54 @@
   #scrubber { flex: 1; accent-color: #89b4fa; cursor: pointer; }
   #tick-counter { font-size: 10px; color: #6c7086; min-width: 54px; text-align: right; white-space: nowrap; }
 
-  #graph { flex: 1; overflow: hidden; }
+  #tab-bar { display: flex; }
+  .tab-btn {
+    flex: 1; background: transparent; border: none; border-bottom: 2px solid transparent;
+    color: #6c7086; font-family: inherit; font-size: 11px; letter-spacing: 0.06em;
+    padding: 6px 0; cursor: pointer; transition: color 0.12s, border-color 0.12s;
+    text-transform: uppercase;
+  }
+  .tab-btn:hover  { color: #a6adc8; }
+  .tab-btn.active { color: #89b4fa; border-bottom-color: #89b4fa; }
+
+  #graph { flex: 1; min-height: 0; overflow: hidden; }
+
+  #debug-panel {
+    position: fixed; bottom: 14px; left: 14px; z-index: 30;
+    background: #181825cc; border: 1px solid #313244;
+    border-radius: 7px; font-size: 10px; backdrop-filter: blur(4px);
+  }
+  #debug-toggle {
+    background: transparent; border: none; color: #585b70;
+    font-family: inherit; font-size: 10px; padding: 5px 10px; cursor: pointer;
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  #debug-toggle:hover { color: #a6adc8; }
+  #debug-body { padding: 0 10px 8px; min-width: 260px; max-width: 380px; }
+  #debug-body button {
+    background: #313244; border: none; color: #cdd6f4; border-radius: 4px;
+    padding: 3px 0; cursor: pointer; font-size: 10px; font-family: inherit;
+  }
+  .dbg { margin: 3px 0; color: #a6adc8; word-break: break-all; }
+  .dbg b { color: #89b4fa; }
+  .dbg.ok { color: #a6e3a1; }
+  .dbg.err { color: #f38ba8; }
+  .dbg.warn { color: #fab387; }
 
   #legend {
     position: fixed; bottom: 14px; right: 14px; z-index: 20;
-    background: #181825; border: 1px solid #313244;
+    background: #181825cc; border: 1px solid #313244;
     border-radius: 7px; padding: 8px 12px; font-size: 10px; min-width: 116px;
+    backdrop-filter: blur(4px);
   }
   #legend-title { color: #6c7086; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
   .legend-item { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; color: #a6adc8; }
   .legend-item:last-child { margin-bottom: 0; }
   .ls { width: 15px; height: 11px; flex-shrink: 0; }
-  .ls-sel  { background: #2a1e40; border: 1.5px solid #cba6f7; border-radius: 50%; }
-  .ls-seq  { background: #1e2540; border: 1.5px solid #89b4fa; border-radius: 2px; }
-  .ls-act  { background: #1e3028; border: 1.5px solid #a6e3a1; border-radius: 4px; }
-  .ls-cond { background: #301e28; border: 1.5px solid #f38ba8; transform: rotate(45deg) scale(0.72); }
+  .ls-sel  { background: #2e1f4a; border: 1.5px solid #cba6f7; border-radius: 50%; }
+  .ls-seq  { background: #1a2d5a; border: 1.5px solid #89b4fa; border-radius: 2px; }
+  .ls-act  { background: #1a3a28; border: 1.5px solid #a6e3a1; border-radius: 4px; }
+  .ls-cond { background: #3a1a28; border: 1.5px solid #f38ba8; transform: rotate(45deg) scale(0.72); }
 </style>
 </head>
 <body>
@@ -79,9 +112,21 @@
     <button id="btn-play" class="ctrl-btn">⏵ Play</button>
     <span   id="tick-counter">— / —</span>
   </div>
+  <div id="tab-bar">
+    <button id="tab-active" class="tab-btn active" onclick="switchTab('active')">Active Path</button>
+    <button id="tab-tree"   class="tab-btn"        onclick="switchTab('tree')">Full Tree</button>
+  </div>
 </div>
 
 <div id="graph"></div>
+
+<div id="debug-panel">
+  <button id="debug-toggle" onclick="toggleDebug()">debug</button>
+  <div id="debug-body" style="display:none">
+    <div id="debug-lines"></div>
+    <button onclick="fetchDebug()" style="margin-top:6px;width:100%">refresh</button>
+  </div>
+</div>
 
 <div id="legend">
   <div id="legend-title">Node types</div>
@@ -91,6 +136,7 @@
   <div class="legend-item"><div class="ls ls-cond"></div> Condition</div>
 </div>
 
-<script src="/viewer.js"></script>
+<script src="vis-network.min.js"></script>
+<script src="viewer.js"></script>
 </body>
 </html>
