@@ -8,9 +8,9 @@ public class DroneChallenger : ModuleRules
 
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
-			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "CesiumRuntime", "UMG", "WebBrowser", "AIModule"
+			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "CesiumRuntime", "UMG", "WebBrowser", "WebBrowserWidget", "AIModule"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore", "ArboristLib" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore", "ArboristLib", "Sockets", "Networking" });
 	}
 }

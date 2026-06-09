@@ -5,9 +5,9 @@
 
 class UBTDisplayWidget;
 class UDroneTrackingWidget;
-class UDroneMiniMapWidget;
 class UDronePFDWidget;
 class UDroneCrosshairWidget;
+class UMiniMapWidget;
 class ADroneActor;
 class ATargetPawn;
 
@@ -23,21 +23,20 @@ public:
     TSubclassOf<UDroneTrackingWidget> TrackingWidgetClass;
 
     UPROPERTY(EditDefaultsOnly, Category = "HUD")
-    TSubclassOf<UDroneMiniMapWidget> MiniMapWidgetClass;
-
-    UPROPERTY(EditDefaultsOnly, Category = "HUD")
     TSubclassOf<UDronePFDWidget> PFDWidgetClass;
 
     UPROPERTY(EditDefaultsOnly, Category = "HUD")
     TSubclassOf<UDroneCrosshairWidget> CrosshairWidgetClass;
 
+    void NotifyHUDServerReady();
+
 protected:
     virtual void BeginPlay() override;
 
 private:
-    UPROPERTY() TObjectPtr<UBTDisplayWidget>       BTDisplay;
-    UPROPERTY() TObjectPtr<UDroneTrackingWidget>   TrackingWidget;
-    UPROPERTY() TObjectPtr<UDroneMiniMapWidget>    MiniMapWidget;
-    UPROPERTY() TObjectPtr<UDronePFDWidget>          PFDWidget;
-    UPROPERTY() TObjectPtr<UDroneCrosshairWidget>  CrosshairWidget;
+    UPROPERTY() TObjectPtr<UBTDisplayWidget>      BTDisplay;
+    UPROPERTY() TObjectPtr<UDroneTrackingWidget>  TrackingWidget;
+    UPROPERTY() TObjectPtr<UMiniMapWidget>        MiniMapBrowser;
+    UPROPERTY() TObjectPtr<UDronePFDWidget>       PFDWidget;
+    UPROPERTY() TObjectPtr<UDroneCrosshairWidget> CrosshairWidget;
 };

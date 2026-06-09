@@ -59,13 +59,22 @@ int32 UDronePFDWidget::NativePaint(
 	const float W = Size.X;
 	const float H = Size.Y;
 
-	const float R       = FMath::Min(W * 0.32f, H * 0.44f);
-	const float CX      = W * 0.5f;
-	const float CY      = H * 0.5f;
-	const float StripW  = W * 0.16f;
-	const float StripGap = W * 0.025f;
-	const float StripH  = R * 2.f;
-	const float StripTop = CY - R;
+	const float R        = FMath::Min(W * 0.32f, H * 0.44f);
+	const float CX       = W * 0.5f;
+	const float CY       = H * 0.5f;
+	const float LabelH   = R * 0.10f;
+	const float StripW   = W * 0.155f;
+	const float StripGap = W * 0.028f;
+	const float StripTop = CY - R + LabelH;
+	const float StripH   = R * 2.f - LabelH;
+
+	// R-relative font sizes — clamp so they're legible at any scale
+	const int32 FontSm = FMath::Clamp(FMath::RoundToInt(R * 0.048f), 6, 14);
+	const int32 FontMd = FMath::Clamp(FMath::RoundToInt(R * 0.058f), 7, 16);
+	const int32 FontLg = FMath::Clamp(FMath::RoundToInt(R * 0.068f), 8, 18);
+	// R-relative text-box dimensions
+	const float TxtW   = R * 0.14f;
+	const float TxtH   = R * 0.09f;
 
 	const float PitchOffset = FMath::Clamp(
 		(CachedPitch / MaxDisplayPitchDeg) * R * 0.85f, -R * 0.97f, R * 0.97f);
@@ -74,6 +83,16 @@ int32 UDronePFDWidget::NativePaint(
 	const FVector2D SkyNormal(FMath::Sin(RollRad), -FMath::Cos(RollRad));
 
 	const auto Geo = AllottedGeometry.ToPaintGeometry();
+
+	// Dark panel background — matches studio rgba(8,10,16,0.95)
+	{
+		static const FSlateBrush* const kWB = FCoreStyle::Get().GetBrush("WhiteBrush");
+		FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
+			AllottedGeometry.ToPaintGeometry(
+				FVector2f(W, H), FSlateLayoutTransform(FVector2f(0.f, 0.f))),
+			kWB, ESlateDrawEffect::None,
+			FLinearColor(8.f/255, 10.f/255, 16.f/255, 0.95f));
+	}
 
 	auto MakeLines = [&](const TArray<FVector2D>& Pts, const FLinearColor& Col,
 		float Thick, bool bAA = true)
@@ -210,12 +229,12 @@ int32 UDronePFDWidget::NativePaint(
 
 			if (FMath::Abs(Angle) >= 10.f)
 			{
-				const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Regular", 8);
+				const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Regular", FontSm);
 				const FString Label = FString::FromInt(FMath::Abs(FMath::RoundToInt(Angle)));
-				const FVector2D LabelPos(Left.X - R * 0.12f, Left.Y - 7.f);
+				const FVector2D LabelPos(Left.X - R * 0.12f, Left.Y - TxtH * 0.5f);
 				FSlateDrawElement::MakeText(OutDrawElements, LayerId,
 					AllottedGeometry.ToPaintGeometry(
-						FVector2f(22.f, 14.f),
+						FVector2f(TxtW, TxtH),
 						FSlateLayoutTransform(FVector2f((float)LabelPos.X, (float)LabelPos.Y))),
 					FText::FromString(Label), Font, ESlateDrawEffect::None,
 					FLinearColor(kLadder));
@@ -277,76 +296,87 @@ int32 UDronePFDWidget::NativePaint(
 		MakeLines(Circle, FLinearColor(kArcFrame), 2.f);
 	}
 
+	// bIsLeft=true  → speed tape: inner edge = TapeR, ticks from right, labels on outer left
+	// bIsLeft=false → alt tape:   inner edge = TapeL, ticks from left,  labels on outer right
+	// Outer 45% = label zone, inner 55% = value box zone — no overlap possible.
 	auto DrawTape = [&](float TapeL, float TapeR, float Value, float RangeHalf,
-		float StepMinor, float StepMajor, const FString& UnitStr)
+		float StepMinor, float StepMajor, bool bIsLeft)
 	{
-		MakeBox(FVector2D(TapeL, StripTop), FVector2D(TapeR, StripTop + StripH),
-			kPanel);
-
-		const float TapeW     = TapeR - TapeL;
+		const float TapeW      = TapeR - TapeL;
+		const float Split      = bIsLeft ? TapeL + TapeW * 0.45f : TapeL + TapeW * 0.55f;
 		const float PixPerUnit = StripH / (RangeHalf * 2.f);
-		const float MinorFirst = FMath::CeilToFloat((Value - RangeHalf) / StepMinor) * StepMinor;
+
+		MakeBox(FVector2D(TapeL, StripTop), FVector2D(TapeR, StripTop + StripH), kPanel);
+
+		const float MinorFirst = FMath::CeilToFloat ((Value - RangeHalf) / StepMinor) * StepMinor;
 		const float MinorLast  = FMath::FloorToFloat((Value + RangeHalf) / StepMinor) * StepMinor;
 
-		for (float V = MinorFirst; V <= MinorLast; V += StepMinor)
+		for (float V = MinorFirst; V <= MinorLast + 0.001f; V += StepMinor)
 		{
-			const float Y  = CY - (V - Value) * PixPerUnit;
+			const float Y = CY - (V - Value) * PixPerUnit;
 			if (Y < StripTop || Y > StripTop + StripH) continue;
 
-			const bool bMajor = FMath::Abs(FMath::Fmod(V, StepMajor)) < StepMinor * 0.1f;
-			const float TickLen = bMajor ? TapeW * 0.45f : TapeW * 0.25f;
-			const float TickX   = TapeR - TickLen;
+			const bool  bMajor  = FMath::Abs(FMath::Fmod(V, StepMajor)) < StepMinor * 0.1f;
+			const float TickLen = bMajor ? TapeW * 0.50f : TapeW * 0.28f;
 
-			MakeLines({ FVector2D(TickX, Y), FVector2D(TapeR, Y) },
-				FLinearColor(bMajor ? kLadder : kDim), 1.f, false);
+			if (bIsLeft)
+				MakeLines({ FVector2D(TapeR - TickLen, Y), FVector2D(TapeR, Y) },
+					FLinearColor(bMajor ? kLadder : kDim), 1.f, false);
+			else
+				MakeLines({ FVector2D(TapeL, Y), FVector2D(TapeL + TickLen, Y) },
+					FLinearColor(bMajor ? kLadder : kDim), 1.f, false);
 
 			if (bMajor)
 			{
-				const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Regular", 9);
+				const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Regular", FontMd);
 				const FString Label = FString::FromInt(FMath::RoundToInt(V));
+				const float LblInset = TapeW * 0.08f;
+				const float LblX = bIsLeft ? TapeL + LblInset : TapeR - LblInset - TxtW;
 				FSlateDrawElement::MakeText(OutDrawElements, LayerId,
 					AllottedGeometry.ToPaintGeometry(
-						FVector2f(TapeW * 0.8f, 14.f),
-						FSlateLayoutTransform(FVector2f((float)TapeL + 2.f, (float)Y - 7.f))),
+						FVector2f(TxtW, TxtH),
+						FSlateLayoutTransform(FVector2f(LblX, Y - TxtH * 0.5f))),
 					FText::FromString(Label), Font, ESlateDrawEffect::None,
 					FLinearColor(kTickText));
 			}
 		}
 
-		const float BoxH    = StripH * 0.11f;
-		const float BoxHalf = BoxH * 0.5f;
-		MakeBox(FVector2D(TapeL + 1.f, CY - BoxHalf),
-			FVector2D(TapeR - 1.f, CY + BoxHalf), kHighlight);
+		// Value box — inner zone only, no overlap with labels
+		const float BoxH = StripH * 0.11f;
+		const float BoxL = bIsLeft ? Split       : TapeL + 1.f;
+		const float BoxR = bIsLeft ? TapeR - 1.f : Split;
+		MakeBox(FVector2D(BoxL, CY - BoxH / 2.f), FVector2D(BoxR, CY + BoxH / 2.f), kHighlight);
 
-		const FSlateFontInfo ValFont = FCoreStyle::GetDefaultFontStyle("Bold", 10);
+		const FSlateFontInfo ValFont = FCoreStyle::GetDefaultFontStyle("Bold", FontLg);
 		const FString ValStr = FString::Printf(TEXT("%.1f"), Value);
 		FSlateDrawElement::MakeText(OutDrawElements, LayerId,
 			AllottedGeometry.ToPaintGeometry(
-				FVector2f(TapeW, BoxH),
-				FSlateLayoutTransform(FVector2f((float)TapeL, (float)(CY - BoxHalf)))),
+				FVector2f(BoxR - BoxL, BoxH),
+				FSlateLayoutTransform(FVector2f(BoxL, CY - BoxH / 2.f))),
 			FText::FromString(ValStr), ValFont, ESlateDrawEffect::None,
 			FLinearColor(kValueText));
 	};
 
 	const float SpeedR = CX - R - StripGap;
 	const float SpeedL = SpeedR - StripW;
-	DrawTape(SpeedL, SpeedR, CachedSpeedMs, 8.f, 1.f, 5.f, TEXT("m/s"));
+	DrawTape(SpeedL, SpeedR, CachedSpeedMs, 8.f,  1.f,  5.f, true);
 
 	const float AltL = CX + R + StripGap;
 	const float AltR = AltL + StripW;
-	DrawTape(AltL, AltR, CachedAltM, 40.f, 5.f, 20.f, TEXT("m"));
+	DrawTape(AltL, AltR, CachedAltM, 40.f, 5.f, 20.f, false);
 
-	const FSlateFontInfo UnitFont = FCoreStyle::GetDefaultFontStyle("Regular", 7);
+	// Unit labels — just above tape top, all sizes R-relative
+	const FSlateFontInfo UnitFont = FCoreStyle::GetDefaultFontStyle("Bold", FontLg);
 	FSlateDrawElement::MakeText(OutDrawElements, LayerId,
-		AllottedGeometry.ToPaintGeometry(FVector2f(StripW, 12.f),
-			FSlateLayoutTransform(FVector2f((float)SpeedL, (float)(StripTop - 12.f)))),
+		AllottedGeometry.ToPaintGeometry(FVector2f(StripW, LabelH),
+			FSlateLayoutTransform(FVector2f(SpeedL, StripTop - LabelH * 0.85f))),
 		FText::FromString(TEXT("SPD m/s")), UnitFont,
-		ESlateDrawEffect::None, FLinearColor(kDim));
+		ESlateDrawEffect::None, FLinearColor(0.75f, 0.76f, 0.82f, 0.80f));
 	FSlateDrawElement::MakeText(OutDrawElements, LayerId,
-		AllottedGeometry.ToPaintGeometry(FVector2f(StripW, 12.f),
-			FSlateLayoutTransform(FVector2f((float)AltL, (float)(StripTop - 12.f)))),
+		AllottedGeometry.ToPaintGeometry(FVector2f(StripW, LabelH),
+			FSlateLayoutTransform(FVector2f(AltL, StripTop - LabelH * 0.85f))),
 		FText::FromString(TEXT("ALT m")), UnitFont,
-		ESlateDrawEffect::None, FLinearColor(kDim));
+		ESlateDrawEffect::None, FLinearColor(0.75f, 0.76f, 0.82f, 0.80f));
 
 	return LayerId + 1;
 }

@@ -14,6 +14,7 @@ class APatrolPath;
 class ACesiumGeoreference;
 
 namespace bt { class BehaviorTree; class DecisionEmitter; class MonitorServer; }
+class FDroneHUDServer;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnTargetCaptured, ATargetPawn*);
 
@@ -55,6 +56,7 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Target|Tracking") float BestTrackingTime = 0.0f;
 	[[nodiscard]] const FDroneGraph& GetGraph() const { return Graph; }
 	[[nodiscard]] bool IsDroneInFOV() const { return bDroneInFOV; }
+	[[nodiscard]] bool IsHUDServerRunning() const;
 
 private:
 	UPROPERTY(VisibleAnywhere, Category = "Components")
@@ -84,9 +86,10 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	TObjectPtr<UCesiumGlobeAnchorComponent> GlobeAnchor;
 
-	bt::BehaviorTree*    Tree    = nullptr;
-	bt::DecisionEmitter* Emitter = nullptr;
-	bt::MonitorServer*   Monitor = nullptr;
+	bt::BehaviorTree*    Tree      = nullptr;
+	bt::DecisionEmitter* Emitter   = nullptr;
+	bt::MonitorServer*   Monitor   = nullptr;
+	FDroneHUDServer*     HUDServer = nullptr;
 
 	UPROPERTY()
 	TObjectPtr<ADroneActor> CachedDrone;
@@ -111,6 +114,7 @@ private:
 	float PositionLogTimer = 0.0f;
 
 	void BuildTree();
+	void WriteGraphDataJS();
 	void UpdateDroneState();
 	bool ComputeDroneInFOV() const;
 	void AdvanceAlongPath();
@@ -119,6 +123,7 @@ private:
 	void TryInitialPlacement();
 	void PeriodicTerrainSnap();
 	bool ShouldAcceptAltitude(float CandidateZ);
+	void RetryHUDServer();
 
 	FVector      DroneEditorPos;
 	float        PlacementRadius    = 20000.0f;
@@ -126,7 +131,8 @@ private:
 
 	TArray<float> AltitudeHistory;
 	static constexpr int32 AltHistorySize    = 5;
-	static constexpr float AltSpikeThreshold = 500.0f;  // 5 m spike tolerance
+	static constexpr float AltSpikeThreshold = 500.0f;
 	FTimerHandle PlacementTimer;
 	FTimerHandle TerrainSnapTimer;
+	FTimerHandle HUDServerRetryTimer;
 };
