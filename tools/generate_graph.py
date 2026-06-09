@@ -1,12 +1,12 @@
 """
-Generates nodes.csv, edges.csv, and graph_data.js for the Munich playground
+Generates nodes.csv, edges.csv, and munich_graph.js for the Munich playground
 (2km radius around Marienplatz) from the OpenStreetMap road network via
 Overpass API, with elevation data fetched from the Open Elevation API.
 
 Every consecutive node pair in each OSM way becomes an edge. IDs are remapped
 to sequential integers starting at 1.
 
-graph_data.js uses Unreal world-space coordinates:
+munich_graph.js uses Unreal world-space coordinates:
   x = northing offset from centre in cm  (positive = North)
   y = easting  offset from centre in cm  (positive = East)
   z = elevation above sea level   in cm
@@ -15,7 +15,7 @@ Usage:
     pip install requests
     python generate_graph.py
     Copy nodes.csv and edges.csv to Content/Graph/
-    Copy graph_data.js to studio/
+    Copy munich_graph.js to studio/
 """
 
 import csv
@@ -151,7 +151,7 @@ def main() -> None:
         for a, b, length in raw_edges:
             w.writerow([id_map[a], id_map[b], f"{length:.3f}"])
 
-    with open("graph_data.js", "w", encoding="utf-8") as f:
+    with open("munich_graph.js", "w", encoding="utf-8") as f:
         node_parts: list[str] = []
         for osm_id in sorted(used_node_ids):
             lat, lon       = raw_nodes[osm_id]
@@ -174,9 +174,9 @@ def main() -> None:
 
     print(f"nodes.csv    : {len(used_node_ids)} nodes")
     print(f"edges.csv    : {len(raw_edges)} directed edges")
-    print(f"graph_data.js: {len(used_node_ids)} nodes, {len(seen_edges)} undirected edges")
+    print(f"munich_graph.js: {len(used_node_ids)} nodes, {len(seen_edges)} undirected edges")
     print("Copy nodes.csv and edges.csv to Content/Graph/")
-    print("Copy graph_data.js to studio/")
+    print("Copy munich_graph.js to studio/")
 
 
 if __name__ == "__main__":

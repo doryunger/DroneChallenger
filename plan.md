@@ -76,7 +76,7 @@ Prebuilt External UBT module (`Source/ThirdParty/ArboristLib/`). Single static l
 - Moving patrol car NPC navigating the Munich road graph (`DroneGraph`)
 - 4-priority behavior tree: captured → in_capture_range → spotted → patrol
 - 1 m capture radius; beacon state driven by BT actions
-- `MonitorServer` on port 8080 serving `ArboristUI/viewer.html`
+- `MonitorServer` on port 8080 serving `HUD/arborist/viewer/viewer.html`
 
 ### Phase 7e — BT visualiser panel ✅
 - `ADroneHUD` + `UBTDisplayWidget` (C++) wired to `WBP_BTDisplay` Blueprint
