@@ -3,6 +3,7 @@
 #include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Fonts/FontMeasure.h"
 
 namespace
 {
@@ -10,12 +11,12 @@ namespace
 	const FColor kEarth      { 110,  68,  22, 255 };
 	const FColor kHorizon    { 255, 255, 255, 255 };
 	const FColor kLadder     { 220, 220, 220, 220 };
-	const FColor kDim        { 160, 160, 160, 180 };
-	const FColor kArcFrame   {  80,  85, 110, 200 };
-	const FColor kPanel      {  18,  20,  28, 215 };
+	const FColor kDim        { 160, 160, 160, 140 };
+	const FColor kArcFrame   {  80,  85, 110, 204 };
+	const FColor kPanel      {  18,  20,  28, 224 };
 	const FColor kHighlight  {  55,  95, 155, 255 };
 	const FColor kValueText  { 230, 230, 230, 255 };
-	const FColor kTickText   { 170, 175, 190, 200 };
+	const FColor kTickText   { 170, 175, 190, 217 };
 }
 
 static FSlateResourceHandle GetFillHandle()
@@ -43,8 +44,10 @@ void UDronePFDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 	const FRotator Rot = Drone->GetActorRotation();
 	CachedPitch   = Rot.Pitch;
 	CachedRoll    = Rot.Roll;
-	CachedSpeedMs = Drone->GetVelocity().Size() / 100.f;
-	CachedAltM    = Drone->GetActorLocation().Z / 100.f;
+	const FVector Vel  = Drone->GetVelocity();
+	CachedSpeedMs      = FVector(Vel.X, Vel.Y, 0.f).Size() / 100.f;
+	CachedVertSpeedMs  = Vel.Z / 100.f;
+	CachedAltM         = Drone->GetActorLocation().Z / 100.f;
 }
 
 int32 UDronePFDWidget::NativePaint(
@@ -62,19 +65,18 @@ int32 UDronePFDWidget::NativePaint(
 	const float R        = FMath::Min(W * 0.32f, H * 0.44f);
 	const float CX       = W * 0.5f;
 	const float CY       = H * 0.5f;
-	const float LabelH   = R * 0.10f;
-	const float StripW   = W * 0.155f;
-	const float StripGap = W * 0.028f;
+	const float LabelH   = R * 0.17f;
+	const float StripW   = W * 0.11f;
+	const float StripGap = W * 0.070f;
 	const float StripTop = CY - R + LabelH;
 	const float StripH   = R * 2.f - LabelH;
 
-	// R-relative font sizes — clamp so they're legible at any scale
-	const int32 FontSm = FMath::Clamp(FMath::RoundToInt(R * 0.048f), 6, 14);
-	const int32 FontMd = FMath::Clamp(FMath::RoundToInt(R * 0.058f), 7, 16);
-	const int32 FontLg = FMath::Clamp(FMath::RoundToInt(R * 0.068f), 8, 18);
-	// R-relative text-box dimensions
-	const float TxtW   = R * 0.14f;
-	const float TxtH   = R * 0.09f;
+	const float SpeedR_bg = CX - R - StripGap;
+	const float SpeedL_bg = SpeedR_bg - StripW;
+	const float AltL_bg   = CX + R + StripGap;
+	const float AltR_bg   = AltL_bg + StripW;
+
+	const int32 FontSm = FMath::Clamp(FMath::RoundToInt(R * 0.060f), 7, 16);
 
 	const float PitchOffset = FMath::Clamp(
 		(CachedPitch / MaxDisplayPitchDeg) * R * 0.85f, -R * 0.97f, R * 0.97f);
@@ -83,16 +85,6 @@ int32 UDronePFDWidget::NativePaint(
 	const FVector2D SkyNormal(FMath::Sin(RollRad), -FMath::Cos(RollRad));
 
 	const auto Geo = AllottedGeometry.ToPaintGeometry();
-
-	// Dark panel background — matches studio rgba(8,10,16,0.95)
-	{
-		static const FSlateBrush* const kWB = FCoreStyle::Get().GetBrush("WhiteBrush");
-		FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
-			AllottedGeometry.ToPaintGeometry(
-				FVector2f(W, H), FSlateLayoutTransform(FVector2f(0.f, 0.f))),
-			kWB, ESlateDrawEffect::None,
-			FLinearColor(8.f/255, 10.f/255, 16.f/255, 0.95f));
-	}
 
 	auto MakeLines = [&](const TArray<FVector2D>& Pts, const FLinearColor& Col,
 		float Thick, bool bAA = true)
@@ -113,6 +105,19 @@ int32 UDronePFDWidget::NativePaint(
 			ESlateDrawEffect::None,
 			FLinearColor(Col));
 	};
+
+	{
+		const float BgL = FMath::Max(0.f, SpeedL_bg);
+		const float BgR = FMath::Min(W,   AltR_bg);
+		const float BgT = StripTop - LabelH * 0.85f;
+		const float BgB = StripTop + StripH;
+		FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
+			AllottedGeometry.ToPaintGeometry(
+				FVector2f(BgR - BgL, BgB - BgT),
+				FSlateLayoutTransform(FVector2f(BgL, BgT))),
+			kWhiteBrush, ESlateDrawEffect::None,
+			FLinearColor(8.f/255, 10.f/255, 16.f/255, 0.95f));
+	}
 
 	auto LocalToAbs = [&](FVector2D P) -> FVector2f
 	{
@@ -197,45 +202,124 @@ int32 UDronePFDWidget::NativePaint(
 				GetFillHandle(), Verts, Indices, nullptr, 0, 0);
 	}
 
+	++LayerId;
+
+	auto ClipToCircle = [&](FVector2D& A, FVector2D& B) -> bool
 	{
-		const float HLen = HorizonPt.X > CX ? W : W;
+		const float dx = (float)(B.X - A.X), dy = (float)(B.Y - A.Y);
+		const float fx = (float)(A.X - CX),  fy = (float)(A.Y - CY);
+		const float a  = dx*dx + dy*dy;
+		if (a < 1e-6f) return (fx*fx + fy*fy) <= R*R;
+		const float b    = 2.f*(fx*dx + fy*dy);
+		const float c    = fx*fx + fy*fy - R*R;
+		const float disc = b*b - 4.f*a*c;
+		if (disc < 0.f) return false;
+		const float sq = FMath::Sqrt(disc);
+		const float t0 = FMath::Clamp((-b - sq) / (2.f*a), 0.f, 1.f);
+		const float t1 = FMath::Clamp((-b + sq) / (2.f*a), 0.f, 1.f);
+		if (t1 <= t0) return false;
+		const FVector2D Orig = A;
+		A = FVector2D(Orig.X + dx*t0, Orig.Y + dy*t0);
+		B = FVector2D(Orig.X + dx*t1, Orig.Y + dy*t1);
+		return true;
+	};
+
+	{
 		const float CosR = FMath::Cos(RollRad);
 		const float SinR = FMath::Sin(RollRad);
-		const float Ext  = R * 1.1f;
-		MakeLines({
-			FVector2D(CX - Ext * CosR, CY + PitchOffset - Ext * SinR),
-			FVector2D(CX + Ext * CosR, CY + PitchOffset + Ext * SinR) },
-			FLinearColor(kHorizon), 2.f);
+		FVector2D HL(CX - R * CosR, CY + PitchOffset - R * SinR);
+		FVector2D HR(CX + R * CosR, CY + PitchOffset + R * SinR);
+		if (ClipToCircle(HL, HR))
+			MakeLines({ HL, HR }, FLinearColor(kHorizon), 2.f);
 	}
 
 	{
+		struct FMark { float Deg; float Half; float Thick; bool bLabel; bool bSerif; bool bDash; };
+		static constexpr FMark kMarks[] = {
+			{-20.f, 0.28f, 1.5f, true,  true,  false},
+			{-15.f, 0.20f, 1.2f, false, true,  false},
+			{-10.f, 0.22f, 1.5f, true,  true,  false},
+			{ -5.f, 0.14f, 1.2f, false, false, true },
+			{ -2.5f, 0.07f, 1.0f, false, false, false},
+			{  2.5f, 0.07f, 1.0f, false, false, false},
+			{  5.f, 0.14f, 1.2f, false, false, true },
+			{ 10.f, 0.22f, 1.5f, true,  true,  false},
+			{ 15.f, 0.20f, 1.2f, false, true,  false},
+			{ 20.f, 0.28f, 1.5f, true,  true,  false},
+		};
+
 		const float CosR = FMath::Cos(RollRad);
 		const float SinR = FMath::Sin(RollRad);
-		const TArray<float> PitchAngles = { -20.f, -10.f, -5.f, 5.f, 10.f, 20.f };
-		for (float Angle : PitchAngles)
+
+		for (const FMark& M : kMarks)
 		{
-			const float PixOffset = -(Angle / MaxDisplayPitchDeg) * R * 0.85f;
-			const float PX = CX + (PitchOffset + PixOffset) * SinR;
-			const float PY = CY + PitchOffset - PixOffset * CosR + PixOffset * SinR;
+			const float PixOffset = -(M.Deg / MaxDisplayPitchDeg) * R * 0.85f;
+			const float LineHalf  = R * M.Half;
 
-			const float LineHalf = (FMath::Abs(Angle) >= 10.f) ? R * 0.28f : R * 0.15f;
-			const FVector2D Ladder_CX(CX + (PitchOffset + PixOffset) * SinR,
-				CY + (PitchOffset + PixOffset) * (-CosR) + CY - CY);
+			const FVector2D LC(CX - PixOffset * SinR, CY + PixOffset * CosR + PitchOffset);
+			FVector2D Left (LC.X - LineHalf * CosR, LC.Y - LineHalf * SinR);
+			FVector2D Right(LC.X + LineHalf * CosR, LC.Y + LineHalf * SinR);
+			if (!ClipToCircle(Left, Right)) continue;
 
-			const FVector2D LC(CX - (-PixOffset) * SinR, CY + (-PixOffset) * CosR + PitchOffset);
-			const FVector2D Left (LC.X - LineHalf * CosR, LC.Y - LineHalf * SinR);
-			const FVector2D Right(LC.X + LineHalf * CosR, LC.Y + LineHalf * SinR);
-			MakeLines({ Left, Right }, FLinearColor(kLadder), 1.f, false);
+			const FLinearColor LineCol = (FMath::Abs(M.Deg) < 3.f)
+				? FLinearColor(kDim) : FLinearColor(kLadder);
 
-			if (FMath::Abs(Angle) >= 10.f)
+			if (M.bDash)
+			{
+				const float DashLen = R * 0.04f;
+				const float GapLen  = R * 0.025f;
+				const float Total   = FMath::Sqrt(
+					(float)((Right.X-Left.X)*(Right.X-Left.X) + (Right.Y-Left.Y)*(Right.Y-Left.Y)));
+				float Dist = 0.f;
+				bool  bOn  = true;
+				while (Dist < Total)
+				{
+					const float SegEnd = FMath::Min(Dist + (bOn ? DashLen : GapLen), Total);
+					if (bOn)
+					{
+						const FVector2D PA = Left + FVector2D(Dist   * CosR, Dist   * SinR);
+						const FVector2D PB = Left + FVector2D(SegEnd * CosR, SegEnd * SinR);
+						MakeLines({ PA, PB }, LineCol, M.Thick, false);
+					}
+					Dist = SegEnd;
+					bOn  = !bOn;
+				}
+			}
+			else
+			{
+				MakeLines({ Left, Right }, LineCol, M.Thick, false);
+			}
+
+			if (M.bSerif)
+			{
+				const float SerLen = R * 0.055f;
+				const FVector2D InDir = (M.Deg > 0.f)
+					? FVector2D(-SinR,  CosR)
+					: FVector2D( SinR, -CosR);
+				MakeLines({ Left,  Left  + InDir * SerLen }, FLinearColor(kLadder), M.Thick, false);
+				MakeLines({ Right, Right + InDir * SerLen }, FLinearColor(kLadder), M.Thick, false);
+			}
+
+			if (M.bLabel)
 			{
 				const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Regular", FontSm);
-				const FString Label = FString::FromInt(FMath::Abs(FMath::RoundToInt(Angle)));
-				const FVector2D LabelPos(Left.X - R * 0.12f, Left.Y - TxtH * 0.5f);
+				const FString Label = FString::FromInt(FMath::Abs(FMath::RoundToInt(M.Deg)));
+				const FVector2D TextSize = FSlateApplication::Get().GetRenderer()
+					->GetFontMeasureService()->Measure(Label, Font);
+				const float LY = Left.Y - 4.f * SinR - (float)TextSize.Y * 0.5f;
+
 				FSlateDrawElement::MakeText(OutDrawElements, LayerId,
 					AllottedGeometry.ToPaintGeometry(
-						FVector2f(TxtW, TxtH),
-						FSlateLayoutTransform(FVector2f((float)LabelPos.X, (float)LabelPos.Y))),
+						FVector2f((float)TextSize.X, (float)TextSize.Y),
+						FSlateLayoutTransform(FVector2f(
+							Left.X - 3.f - (float)TextSize.X, LY))),
+					FText::FromString(Label), Font, ESlateDrawEffect::None,
+					FLinearColor(kLadder));
+
+				FSlateDrawElement::MakeText(OutDrawElements, LayerId,
+					AllottedGeometry.ToPaintGeometry(
+						FVector2f((float)TextSize.X, (float)TextSize.Y),
+						FSlateLayoutTransform(FVector2f(Right.X + 3.f, LY))),
 					FText::FromString(Label), Font, ESlateDrawEffect::None,
 					FLinearColor(kLadder));
 			}
@@ -243,46 +327,31 @@ int32 UDronePFDWidget::NativePaint(
 	}
 
 	{
-		const float ArcOuter = R + R * 0.08f;
-		const float ArcInner = R + R * 0.01f;
-		const float ArcSpan  = 150.f;
-		constexpr int32 kArcSegs = 40;
+		const FColor kWing{ 255, 215, 40, 242 };
+		const float  WingLen = R * 0.22f;
+		const float  WingGap = 6.f;
+		MakeLines({ FVector2D(CX - WingLen - WingGap, CY), FVector2D(CX - WingGap, CY) },
+			FLinearColor(kWing), 2.f);
+		MakeLines({ FVector2D(CX + WingGap, CY), FVector2D(CX + WingLen + WingGap, CY) },
+			FLinearColor(kWing), 2.f);
+		MakeBox(FVector2D(CX - 2.5f, CY - 2.5f), FVector2D(CX + 2.5f, CY + 2.5f), kWing);
+	}
 
-		TArray<FVector2D> ArcOPts, ArcIPts;
-		for (int32 i = 0; i <= kArcSegs; ++i)
-		{
-			const float A = FMath::DegreesToRadians(-90.f - ArcSpan * 0.5f + ArcSpan * i / kArcSegs);
-			ArcOPts.Add(FVector2D(CX + ArcOuter * FMath::Cos(A), CY + ArcOuter * FMath::Sin(A)));
-			ArcIPts.Add(FVector2D(CX + ArcInner * FMath::Cos(A), CY + ArcInner * FMath::Sin(A)));
-		}
-		MakeLines(ArcOPts, FLinearColor(kArcFrame), 1.f);
-
-		const TArray<float> RollTicks = { -60.f, -45.f, -30.f, -20.f, -10.f,
+	{
+		const TArray<float> BankAngles = { -60.f, -45.f, -30.f, -20.f, -10.f,
 		                                     0.f,
 		                                   10.f,  20.f,  30.f,  45.f,  60.f };
-		for (float TickDeg : RollTicks)
+		const float EdgeR = R * 0.985f;
+		for (float BankDeg : BankAngles)
 		{
-			const float A      = FMath::DegreesToRadians(-90.f + TickDeg);
-			const float TickLen = (FMath::Abs(FMath::RoundToInt(TickDeg)) % 30 == 0 || TickDeg == 0.f)
-				? R * 0.09f : R * 0.05f;
-			const FVector2D TO(CX + ArcOuter * FMath::Cos(A), CY + ArcOuter * FMath::Sin(A));
-			const FVector2D TI(CX + (ArcOuter - TickLen) * FMath::Cos(A),
-				CY + (ArcOuter - TickLen) * FMath::Sin(A));
-			MakeLines({ TI, TO }, FLinearColor(kArcFrame), 1.2f);
+			const float A       = FMath::DegreesToRadians(-90.f + BankDeg);
+			const bool  bMajor  = (FMath::Abs(FMath::RoundToInt(BankDeg)) % 30 == 0 || BankDeg == 0.f);
+			const float TickLen = bMajor ? R * 0.08f : R * 0.045f;
+			const FVector2D Outer(CX + EdgeR             * FMath::Cos(A), CY + EdgeR             * FMath::Sin(A));
+			const FVector2D Inner(CX + (EdgeR - TickLen) * FMath::Cos(A), CY + (EdgeR - TickLen) * FMath::Sin(A));
+			MakeLines({ Outer, Inner }, FLinearColor(kArcFrame), 1.2f);
 		}
 
-		const float IndicatorAngle = FMath::DegreesToRadians(-90.f + CachedRoll);
-		const float IndR     = ArcOuter + R * 0.06f;
-		const float IndBase  = ArcOuter + R * 0.01f;
-		const float IndHalf  = R * 0.04f;
-		const FVector2D IndTip(CX + IndR * FMath::Cos(IndicatorAngle),
-			CY + IndR * FMath::Sin(IndicatorAngle));
-		const FVector2D IndPerp(-FMath::Sin(IndicatorAngle), FMath::Cos(IndicatorAngle));
-		const FVector2D IndBaseL = FVector2D(CX + IndBase * FMath::Cos(IndicatorAngle),
-			CY + IndBase * FMath::Sin(IndicatorAngle)) + IndPerp * IndHalf;
-		const FVector2D IndBaseR = FVector2D(CX + IndBase * FMath::Cos(IndicatorAngle),
-			CY + IndBase * FMath::Sin(IndicatorAngle)) - IndPerp * IndHalf;
-		MakeLines({ IndTip, IndBaseL, IndBaseR, IndTip }, FLinearColor(kHorizon), 1.5f);
 	}
 
 	{
@@ -296,14 +365,10 @@ int32 UDronePFDWidget::NativePaint(
 		MakeLines(Circle, FLinearColor(kArcFrame), 2.f);
 	}
 
-	// bIsLeft=true  → speed tape: inner edge = TapeR, ticks from right, labels on outer left
-	// bIsLeft=false → alt tape:   inner edge = TapeL, ticks from left,  labels on outer right
-	// Outer 45% = label zone, inner 55% = value box zone — no overlap possible.
 	auto DrawTape = [&](float TapeL, float TapeR, float Value, float RangeHalf,
-		float StepMinor, float StepMajor, bool bIsLeft)
+		float StepMinor, float StepMajor, bool bIsLeft, float VertSpeed = -9999.f)
 	{
 		const float TapeW      = TapeR - TapeL;
-		const float Split      = bIsLeft ? TapeL + TapeW * 0.45f : TapeL + TapeW * 0.55f;
 		const float PixPerUnit = StripH / (RangeHalf * 2.f);
 
 		MakeBox(FVector2D(TapeL, StripTop), FVector2D(TapeR, StripTop + StripH), kPanel);
@@ -317,66 +382,114 @@ int32 UDronePFDWidget::NativePaint(
 			if (Y < StripTop || Y > StripTop + StripH) continue;
 
 			const bool  bMajor  = FMath::Abs(FMath::Fmod(V, StepMajor)) < StepMinor * 0.1f;
-			const float TickLen = bMajor ? TapeW * 0.50f : TapeW * 0.28f;
+			const float TickLen = bMajor ? TapeW * 0.38f : TapeW * 0.21f;
 
 			if (bIsLeft)
-				MakeLines({ FVector2D(TapeR - TickLen, Y), FVector2D(TapeR, Y) },
+				MakeLines({ FVector2D(TapeL, Y), FVector2D(TapeL + TickLen, Y) },
 					FLinearColor(bMajor ? kLadder : kDim), 1.f, false);
 			else
-				MakeLines({ FVector2D(TapeL, Y), FVector2D(TapeL + TickLen, Y) },
+				MakeLines({ FVector2D(TapeR - TickLen, Y), FVector2D(TapeR, Y) },
 					FLinearColor(bMajor ? kLadder : kDim), 1.f, false);
 
 			if (bMajor)
 			{
-				const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Regular", FontMd);
+				const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Regular", FontSm);
 				const FString Label = FString::FromInt(FMath::RoundToInt(V));
-				const float LblInset = TapeW * 0.08f;
-				const float LblX = bIsLeft ? TapeL + LblInset : TapeR - LblInset - TxtW;
+				const FVector2D LblSize = FSlateApplication::Get().GetRenderer()
+					->GetFontMeasureService()->Measure(Label, Font);
+				const float LblX = bIsLeft
+					? TapeL + TickLen + 2.f
+					: TapeR - TickLen - 2.f - (float)LblSize.X;
 				FSlateDrawElement::MakeText(OutDrawElements, LayerId,
 					AllottedGeometry.ToPaintGeometry(
-						FVector2f(TxtW, TxtH),
-						FSlateLayoutTransform(FVector2f(LblX, Y - TxtH * 0.5f))),
+						FVector2f((float)LblSize.X, (float)LblSize.Y),
+						FSlateLayoutTransform(FVector2f(LblX, Y - (float)LblSize.Y * 0.5f))),
 					FText::FromString(Label), Font, ESlateDrawEffect::None,
 					FLinearColor(kTickText));
 			}
 		}
 
-		// Value box — inner zone only, no overlap with labels
-		const float BoxH = StripH * 0.11f;
-		const float BoxL = bIsLeft ? Split       : TapeL + 1.f;
-		const float BoxR = bIsLeft ? TapeR - 1.f : Split;
-		MakeBox(FVector2D(BoxL, CY - BoxH / 2.f), FVector2D(BoxR, CY + BoxH / 2.f), kHighlight);
+		const bool  bShowVert = VertSpeed > -9000.f;
+		const float FlagH     = StripH * 0.18f;
+		const float FlagL     = bIsLeft ? TapeR            : TapeL - StripGap;
+		const float FlagR     = bIsLeft ? TapeR + StripGap : TapeL;
+		MakeBox(FVector2D(FlagL, CY - FlagH * 0.5f), FVector2D(FlagR, CY + FlagH * 0.5f), kPanel);
 
-		const FSlateFontInfo ValFont = FCoreStyle::GetDefaultFontStyle("Bold", FontLg);
-		const FString ValStr = FString::Printf(TEXT("%.1f"), Value);
-		FSlateDrawElement::MakeText(OutDrawElements, LayerId,
-			AllottedGeometry.ToPaintGeometry(
-				FVector2f(BoxR - BoxL, BoxH),
-				FSlateLayoutTransform(FVector2f(BoxL, CY - BoxH / 2.f))),
-			FText::FromString(ValStr), ValFont, ESlateDrawEffect::None,
-			FLinearColor(kValueText));
+		const FSlateFontInfo ValFont = FCoreStyle::GetDefaultFontStyle("Bold",
+			FMath::Clamp(FMath::RoundToInt(R * 0.090f), 10, 22));
+		const FString ValStr  = FString::Printf(TEXT("%.1f"), Value);
+		const FVector2D ValSz = FSlateApplication::Get().GetRenderer()
+			->GetFontMeasureService()->Measure(ValStr, ValFont);
+		const float BoxCX = (FlagL + FlagR) * 0.5f;
+
+		if (bShowVert)
+		{
+			const FSlateFontInfo VFont = FCoreStyle::GetDefaultFontStyle("Regular",
+				FMath::Clamp(FMath::RoundToInt(R * 0.048f), 6, 11));
+			const FString VStr  = FString::Printf(TEXT("%s %.1f"),
+				VertSpeed >= 0.f ? TEXT("↑") : TEXT("↓"), FMath::Abs(VertSpeed));
+			const FVector2D VSz = FSlateApplication::Get().GetRenderer()
+				->GetFontMeasureService()->Measure(VStr, VFont);
+
+			const float BlockH = (float)ValSz.Y + (float)VSz.Y + 1.f;
+			const float BlockT = CY - BlockH * 0.5f;
+
+			FSlateDrawElement::MakeText(OutDrawElements, LayerId,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f((float)ValSz.X, (float)ValSz.Y),
+					FSlateLayoutTransform(FVector2f(BoxCX - (float)ValSz.X * 0.5f, BlockT))),
+				FText::FromString(ValStr), ValFont, ESlateDrawEffect::None, FLinearColor(kValueText));
+
+			FSlateDrawElement::MakeText(OutDrawElements, LayerId,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f((float)VSz.X, (float)VSz.Y),
+					FSlateLayoutTransform(FVector2f(BoxCX - (float)VSz.X * 0.5f, BlockT + (float)ValSz.Y + 1.f))),
+				FText::FromString(VStr), VFont, ESlateDrawEffect::None, FLinearColor(kValueText));
+		}
+		else
+		{
+			FSlateDrawElement::MakeText(OutDrawElements, LayerId,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f((float)ValSz.X, (float)ValSz.Y),
+					FSlateLayoutTransform(FVector2f(BoxCX - (float)ValSz.X * 0.5f, CY - (float)ValSz.Y * 0.5f))),
+				FText::FromString(ValStr), ValFont, ESlateDrawEffect::None, FLinearColor(kValueText));
+		}
 	};
 
 	const float SpeedR = CX - R - StripGap;
 	const float SpeedL = SpeedR - StripW;
-	DrawTape(SpeedL, SpeedR, CachedSpeedMs, 8.f,  1.f,  5.f, true);
+	DrawTape(SpeedL, SpeedR, CachedSpeedMs, 8.f,  1.f,  5.f, true, CachedVertSpeedMs);
 
 	const float AltL = CX + R + StripGap;
 	const float AltR = AltL + StripW;
 	DrawTape(AltL, AltR, CachedAltM, 40.f, 5.f, 20.f, false);
 
-	// Unit labels — just above tape top, all sizes R-relative
-	const FSlateFontInfo UnitFont = FCoreStyle::GetDefaultFontStyle("Bold", FontLg);
-	FSlateDrawElement::MakeText(OutDrawElements, LayerId,
-		AllottedGeometry.ToPaintGeometry(FVector2f(StripW, LabelH),
-			FSlateLayoutTransform(FVector2f(SpeedL, StripTop - LabelH * 0.85f))),
-		FText::FromString(TEXT("SPD m/s")), UnitFont,
-		ESlateDrawEffect::None, FLinearColor(0.75f, 0.76f, 0.82f, 0.80f));
-	FSlateDrawElement::MakeText(OutDrawElements, LayerId,
-		AllottedGeometry.ToPaintGeometry(FVector2f(StripW, LabelH),
-			FSlateLayoutTransform(FVector2f(AltL, StripTop - LabelH * 0.85f))),
-		FText::FromString(TEXT("ALT m")), UnitFont,
-		ESlateDrawEffect::None, FLinearColor(0.75f, 0.76f, 0.82f, 0.80f));
+	{
+		const FColor kLabelBg{ 24, 27, 38, 235 };
+		MakeBox(FVector2D(SpeedL, StripTop - LabelH), FVector2D(SpeedR, StripTop), kLabelBg);
+		MakeBox(FVector2D(AltL,   StripTop - LabelH), FVector2D(AltR,   StripTop), kLabelBg);
+		MakeLines({ FVector2D(SpeedL, StripTop), FVector2D(SpeedR, StripTop) }, FLinearColor(kArcFrame), 1.f);
+		MakeLines({ FVector2D(AltL,   StripTop), FVector2D(AltR,   StripTop) }, FLinearColor(kArcFrame), 1.f);
+
+		const FSlateFontInfo UnitFont = FCoreStyle::GetDefaultFontStyle("Bold",
+			FMath::Clamp(FMath::RoundToInt(R * 0.072f), 8, 17));
+		const FLinearColor UnitCol(0.80f, 0.82f, 0.90f, 0.90f);
+		const float UnitY = StripTop - LabelH * 0.75f;
+
+		const FString SpdStr = TEXT("SPD (m/s)");
+		const FString AltStr = TEXT("ALT (m)");
+		const FVector2D SpdSize = FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(SpdStr, UnitFont);
+		const FVector2D AltSize = FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(AltStr, UnitFont);
+
+		FSlateDrawElement::MakeText(OutDrawElements, LayerId,
+			AllottedGeometry.ToPaintGeometry(FVector2f((float)SpdSize.X, (float)SpdSize.Y),
+				FSlateLayoutTransform(FVector2f(SpeedL + (StripW - (float)SpdSize.X) * 0.5f, UnitY))),
+			FText::FromString(SpdStr), UnitFont, ESlateDrawEffect::None, UnitCol);
+		FSlateDrawElement::MakeText(OutDrawElements, LayerId,
+			AllottedGeometry.ToPaintGeometry(FVector2f((float)AltSize.X, (float)AltSize.Y),
+				FSlateLayoutTransform(FVector2f(AltL + (StripW - (float)AltSize.X) * 0.5f, UnitY))),
+			FText::FromString(AltStr), UnitFont, ESlateDrawEffect::None, UnitCol);
+	}
 
 	return LayerId + 1;
 }

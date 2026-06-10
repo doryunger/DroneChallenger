@@ -47,7 +47,9 @@ void ADroneHUD::BeginPlay()
         {
             MiniMapBrowser->AddToViewport();
             MiniMapBrowser->SetDesiredSizeInViewport(FVector2D(mmSize, mmSize));
-            MiniMapBrowser->SetPositionInViewport(FVector2D(mmMargin, bottomEdge - mmSize));
+            const float R_mm = (mmSize / 2.f) * 0.78f - 2.f;
+            const float mmY  = bottomEdge - (mmSize / 2.f + R_mm) + VP.Y * 0.02f;
+            MiniMapBrowser->SetPositionInViewport(FVector2D(mmMargin, mmY));
 
             FString HtmlPath = FPaths::ConvertRelativePathToFull(
                 FPaths::ProjectDir() / TEXT("HUD/minimap/minimap.html"));
