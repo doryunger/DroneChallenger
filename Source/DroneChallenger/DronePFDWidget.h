@@ -26,8 +26,9 @@ private:
 	UPROPERTY()
 	TObjectPtr<ADroneActor> Drone;
 
-	float CachedPitch   = 0.f;
-	float CachedRoll    = 0.f;
-	float CachedSpeedMs = 0.f;
-	float CachedAltM    = 0.f;
+	float CachedPitch      = 0.f;
+	float CachedRoll       = 0.f;
+	float CachedSpeedMs    = 0.f;
+	float CachedAltM       = 0.f;
+	float CachedVertSpeedMs = 0.f;
 };
