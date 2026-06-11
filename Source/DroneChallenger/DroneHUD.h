@@ -32,6 +32,7 @@ public:
 
 protected:
     virtual void BeginPlay() override;
+    virtual void DrawHUD() override;
 
 private:
     UPROPERTY() TObjectPtr<UBTDisplayWidget>      BTDisplay;
@@ -39,4 +40,6 @@ private:
     UPROPERTY() TObjectPtr<UMiniMapWidget>        MiniMapBrowser;
     UPROPERTY() TObjectPtr<UDronePFDWidget>       PFDWidget;
     UPROPERTY() TObjectPtr<UDroneCrosshairWidget> CrosshairWidget;
+
+    bool bMiniMapPositioned = false;
 };
