@@ -37,8 +37,9 @@ ADroneActor::ADroneActor()
 
 	SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
 	SpringArm->SetupAttachment(PhysicsBody);
-	SpringArm->TargetArmLength = 180.0f;
-	SpringArm->SocketOffset    = FVector(0.0f, 0.0f, 20.0f);
+	SpringArm->TargetArmLength = 520.0f;
+	SpringArm->SocketOffset    = FVector(0.0f, 0.0f, 0.0f);
+	SpringArm->TargetOffset    = FVector(0.0f, 0.0f, 0.0f);
 	SpringArm->SetRelativeRotation(FRotator(-15.0f, 0.0f, 0.0f));
 	SpringArm->bInheritPitch    = false;
 	SpringArm->bInheritRoll     = false;

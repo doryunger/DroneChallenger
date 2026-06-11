@@ -7,6 +7,7 @@
 #include "TargetPawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/GameViewportClient.h"
+#include "Engine/Canvas.h"
 #include "MiniMapWidget.h"
 
 void ADroneHUD::BeginPlay()
@@ -15,10 +16,6 @@ void ADroneHUD::BeginPlay()
 
     ADroneActor* Drone  = Cast<ADroneActor>(UGameplayStatics::GetActorOfClass(GetWorld(), ADroneActor::StaticClass()));
     ATargetPawn* Target = Cast<ATargetPawn>(UGameplayStatics::GetActorOfClass(GetWorld(), ATargetPawn::StaticClass()));
-
-    FVector2D VP(1920.f, 1080.f);
-    if (GetWorld() && GetWorld()->GetGameViewport())
-        GetWorld()->GetGameViewport()->GetViewportSize(VP);
 
     if (BTDisplayWidgetClass)
     {
@@ -37,19 +34,11 @@ void ADroneHUD::BeginPlay()
         }
     }
 
-    const float mmMargin   = FMath::Min(VP.X, VP.Y) * 0.018f;
-    const float mmSize     = FMath::Min(VP.X * 0.32f, VP.Y * 0.52f);
-    const float bottomEdge = VP.Y - mmMargin;
-
     {
         MiniMapBrowser = CreateWidget<UMiniMapWidget>(GetWorld(), UMiniMapWidget::StaticClass());
         if (MiniMapBrowser)
         {
             MiniMapBrowser->AddToViewport();
-            MiniMapBrowser->SetDesiredSizeInViewport(FVector2D(mmSize, mmSize));
-            const float R_mm = (mmSize / 2.f) * 0.78f - 2.f;
-            const float mmY  = bottomEdge - (mmSize / 2.f + R_mm) + VP.Y * 0.02f;
-            MiniMapBrowser->SetPositionInViewport(FVector2D(mmMargin, mmY));
 
             FString HtmlPath = FPaths::ConvertRelativePathToFull(
                 FPaths::ProjectDir() / TEXT("HUD/minimap/minimap.html"));
@@ -65,14 +54,6 @@ void ADroneHUD::BeginPlay()
         {
             PFDWidget->Init(Drone);
             PFDWidget->AddToViewport();
-            const float pfdW         = VP.X * 0.32f;
-            const float pfdH         = VP.Y * 0.42f;
-            const float R_pfd        = FMath::Min(pfdW * 0.32f, pfdH * 0.44f);
-            const float pfdCircleBot = pfdH / 2.f + R_pfd;
-            PFDWidget->SetDesiredSizeInViewport(FVector2D(pfdW, pfdH));
-            PFDWidget->SetPositionInViewport(FVector2D(
-                (VP.X - pfdW) * 0.5f,
-                bottomEdge - pfdCircleBot));
         }
     }
 
@@ -85,6 +66,23 @@ void ADroneHUD::BeginPlay()
             CrosshairWidget->AddToViewport();
         }
     }
+}
+
+void ADroneHUD::DrawHUD()
+{
+    Super::DrawHUD();
+
+    if (bMiniMapPositioned || !MiniMapBrowser || !Canvas) return;
+    bMiniMapPositioned = true;
+
+    const FVector2D VP(Canvas->SizeX, Canvas->SizeY);
+    const float mmMargin = FMath::Min(VP.X, VP.Y) * 0.018f;
+    const float mmSize   = FMath::Min(VP.X * 0.32f, VP.Y * 0.52f);
+    const float R_pfd      = FMath::Min(VP.X * 0.1024f, VP.Y * 0.165f);
+    const float mmCenterY  = VP.Y * 1.01f - R_pfd;
+
+    MiniMapBrowser->SetDesiredSizeInViewport(FVector2D(mmSize, mmSize));
+    MiniMapBrowser->SetPositionInViewport(FVector2D(mmMargin, mmCenterY - mmSize * 0.5f));
 }
 
 void ADroneHUD::NotifyHUDServerReady()
