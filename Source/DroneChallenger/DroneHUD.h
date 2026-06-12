@@ -8,6 +8,7 @@ class UDroneTrackingWidget;
 class UDronePFDWidget;
 class UDroneCrosshairWidget;
 class UMiniMapWidget;
+class UDroneLoadingWidget;
 class ADroneActor;
 class ATargetPawn;
 
@@ -40,6 +41,9 @@ private:
     UPROPERTY() TObjectPtr<UMiniMapWidget>        MiniMapBrowser;
     UPROPERTY() TObjectPtr<UDronePFDWidget>       PFDWidget;
     UPROPERTY() TObjectPtr<UDroneCrosshairWidget> CrosshairWidget;
+    UPROPERTY() TObjectPtr<UDroneLoadingWidget>   LoadingWidget;
 
     bool bMiniMapPositioned = false;
+
+    void OnSceneReady();
 };

@@ -384,7 +384,7 @@ int32 UDronePFDWidget::NativePaint(
 
 	auto DrawTape = [&](float TapeL, float TapeR, float Value, float RangeHalf,
 		float StepMinor, float StepMajor, bool bIsLeft,
-		float VertSpeed = -9999.f, float ValFontMult = 0.090f)
+		float VertSpeed = -9999.f, float ValFontMult = 0.090f, float ValXBias = 0.f)
 	{
 		const float TapeW      = TapeR - TapeL;
 		const float PixPerUnit = StripH / (RangeHalf * 2.f);
@@ -477,13 +477,13 @@ int32 UDronePFDWidget::NativePaint(
 			FSlateDrawElement::MakeText(OutDrawElements, LayerId,
 				AllottedGeometry.ToPaintGeometry(
 					FVector2f((float)ValSz.X, (float)ValSz.Y),
-					FSlateLayoutTransform(FVector2f(BoxCX - (float)ValSz.X * 0.5f, BlockT))),
+					FSlateLayoutTransform(FVector2f(BoxCX - (float)ValSz.X * 0.5f + ValXBias, BlockT))),
 				FText::FromString(ValStr), ValFont, ESlateDrawEffect::None, FLinearColor(kValueText));
 
 			FSlateDrawElement::MakeText(OutDrawElements, LayerId,
 				AllottedGeometry.ToPaintGeometry(
 					FVector2f((float)VSz.X, (float)VSz.Y),
-					FSlateLayoutTransform(FVector2f(BoxCX - (float)VSz.X * 0.5f, BlockT + (float)ValSz.Y + 1.f))),
+					FSlateLayoutTransform(FVector2f(BoxCX - (float)VSz.X * 0.5f + ValXBias, BlockT + (float)ValSz.Y + 1.f))),
 				FText::FromString(VStr), VFont, ESlateDrawEffect::None, FLinearColor(kValueText));
 		}
 		else
@@ -491,7 +491,7 @@ int32 UDronePFDWidget::NativePaint(
 			FSlateDrawElement::MakeText(OutDrawElements, LayerId,
 				AllottedGeometry.ToPaintGeometry(
 					FVector2f((float)ValSz.X, (float)ValSz.Y),
-					FSlateLayoutTransform(FVector2f(BoxCX - (float)ValSz.X * 0.5f, CY - (float)ValSz.Y * 0.5f))),
+					FSlateLayoutTransform(FVector2f(BoxCX - (float)ValSz.X * 0.5f + ValXBias, CY - (float)ValSz.Y * 0.5f))),
 				FText::FromString(ValStr), ValFont, ESlateDrawEffect::None, FLinearColor(kValueText));
 		}
 	};
@@ -502,7 +502,7 @@ int32 UDronePFDWidget::NativePaint(
 
 	const float AltL = CX + R + StripGap;
 	const float AltR = AltL + StripW;
-	DrawTape(AltL, AltR, CachedAltM, 40.f, 5.f, 20.f, false);
+	DrawTape(AltL, AltR, CachedAltM, 40.f, 5.f, 20.f, false, -9999.f, 0.090f, R * 0.06f);
 
 	{
 		MakeBox(FVector2D(SpeedL, StripTop - LabelH), FVector2D(SpeedR, StripTop), kPanel);

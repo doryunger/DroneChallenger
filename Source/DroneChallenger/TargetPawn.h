@@ -17,6 +17,7 @@ namespace bt { class BehaviorTree; class DecisionEmitter; class MonitorServer; }
 class FDroneHUDServer;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnTargetCaptured, ATargetPawn*);
+DECLARE_MULTICAST_DELEGATE(FOnAltitudeStable);
 
 UCLASS()
 class DRONECHALLENGER_API ATargetPawn : public APawn
@@ -49,6 +50,7 @@ public:
 	float CaptureRequiredTime = 2.0f;
 
 	FOnTargetCaptured OnCaptured;
+	FOnAltitudeStable OnAltitudeStable;
 
 	[[nodiscard]] const bt::DecisionEmitter* GetEmitter() const { return Emitter; }
 
@@ -125,6 +127,7 @@ private:
 	void TryInitialPlacement();
 	void PeriodicTerrainSnap();
 	bool ShouldAcceptAltitude(float CandidateZ);
+	void CheckAltitudeStability();
 	void RetryHUDServer();
 
 	FVector      DroneEditorPos;
@@ -132,9 +135,13 @@ private:
 	bool         bPlacementDone     = false;
 
 	TArray<float> AltitudeHistory;
-	static constexpr int32 AltHistorySize    = 5;
-	static constexpr float AltSpikeThreshold = 500.0f;
+	TArray<float> AltStabilitySamples;
+	static constexpr int32 AltHistorySize         = 5;
+	static constexpr float AltSpikeThreshold      = 500.0f;
+	static constexpr int32 AltStabilitySampleCount = 8;
+	static constexpr float AltStabilityThresholdCm = 30.0f;
 	FTimerHandle PlacementTimer;
 	FTimerHandle TerrainSnapTimer;
 	FTimerHandle HUDServerRetryTimer;
+	FTimerHandle AltStabilityTimer;
 };
