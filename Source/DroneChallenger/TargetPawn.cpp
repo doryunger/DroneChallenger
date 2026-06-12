@@ -733,6 +733,9 @@ void ATargetPawn::TryInitialPlacement()
 		World->GetTimerManager().ClearTimer(PlacementTimer);
 		World->GetTimerManager().SetTimer(
 			TerrainSnapTimer, this, &ATargetPawn::PeriodicTerrainSnap, 60.0f, true);
+		AltStabilitySamples.Empty();
+		World->GetTimerManager().SetTimer(
+			AltStabilityTimer, this, &ATargetPawn::CheckAltitudeStability, 0.5f, true);
 		bPlacementDone = true;
 
 		UE_LOG(LogTemp, Log,
@@ -787,6 +790,27 @@ bool ATargetPawn::ShouldAcceptAltitude(float CandidateZ)
 
 	// Isolated spike — reject, keep history stable.
 	return false;
+}
+
+void ATargetPawn::CheckAltitudeStability()
+{
+	AltStabilitySamples.Add(GetActorLocation().Z);
+
+	if (AltStabilitySamples.Num() > AltStabilitySampleCount)
+		AltStabilitySamples.RemoveAt(0);
+
+	if (AltStabilitySamples.Num() < AltStabilitySampleCount) return;
+
+	float MaxDelta = 0.f;
+	for (int32 i = 1; i < AltStabilitySamples.Num(); ++i)
+		MaxDelta = FMath::Max(MaxDelta,
+			FMath::Abs(AltStabilitySamples[i] - AltStabilitySamples[i - 1]));
+
+	if (MaxDelta < AltStabilityThresholdCm)
+	{
+		GetWorld()->GetTimerManager().ClearTimer(AltStabilityTimer);
+		OnAltitudeStable.Broadcast();
+	}
 }
 
 void ATargetPawn::PeriodicTerrainSnap()

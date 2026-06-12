@@ -3,6 +3,7 @@
 #include "DroneTrackingWidget.h"
 #include "DronePFDWidget.h"
 #include "DroneCrosshairWidget.h"
+#include "DroneLoadingWidget.h"
 #include "DroneActor.h"
 #include "TargetPawn.h"
 #include "Kismet/GameplayStatics.h"
@@ -37,6 +38,7 @@ void ADroneHUD::BeginPlay()
         if (MiniMapBrowser)
         {
             MiniMapBrowser->AddToViewport();
+            MiniMapBrowser->SetRenderOpacity(0.f);
 
             FString HtmlPath = FPaths::ConvertRelativePathToFull(
                 FPaths::ProjectDir() / TEXT("HUD/minimap/minimap.html"));
@@ -64,6 +66,19 @@ void ADroneHUD::BeginPlay()
             CrosshairWidget->AddToViewport();
         }
     }
+
+    if (Target)
+        Target->OnAltitudeStable.AddUObject(this, &ADroneHUD::OnSceneReady);
+
+    LoadingWidget = CreateWidget<UDroneLoadingWidget>(GetWorld(), UDroneLoadingWidget::StaticClass());
+    if (LoadingWidget)
+        LoadingWidget->AddToViewport(10);
+}
+
+void ADroneHUD::OnSceneReady()
+{
+    if (LoadingWidget)  LoadingWidget->Dismiss();
+    if (MiniMapBrowser) MiniMapBrowser->SetRenderOpacity(1.f);
 }
 
 void ADroneHUD::DrawHUD()
