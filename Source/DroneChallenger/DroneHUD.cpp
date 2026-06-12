@@ -23,14 +23,12 @@ void ADroneHUD::BeginPlay()
         if (BTDisplay) BTDisplay->AddToViewport();
     }
 
-    if (TrackingWidgetClass)
     {
-        TrackingWidget = CreateWidget<UDroneTrackingWidget>(GetWorld(), TrackingWidgetClass);
+        TrackingWidget = CreateWidget<UDroneTrackingWidget>(GetWorld(), UDroneTrackingWidget::StaticClass());
         if (TrackingWidget)
         {
             TrackingWidget->Init(Drone, Target);
             TrackingWidget->AddToViewport();
-            TrackingWidget->SetPositionInViewport(FVector2D(20.f, 20.f));
         }
     }
 

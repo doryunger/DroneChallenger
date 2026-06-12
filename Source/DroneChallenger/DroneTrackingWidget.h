@@ -31,10 +31,18 @@ public:
     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "HUD|Tracking")
     FSlateColor GetTrackingColor() const;
 
-private:
-    UPROPERTY()
-    TObjectPtr<ADroneActor> Drone;
+protected:
+    virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+    virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,
+        const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
+        int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 
-    UPROPERTY()
-    TObjectPtr<ATargetPawn> Target;
+private:
+    UPROPERTY() TObjectPtr<ADroneActor> Drone;
+    UPROPERTY() TObjectPtr<ATargetPawn> Target;
+
+    float CachedCurrentTime  = 0.f;
+    float CachedBestTime     = 0.f;
+    bool  bCachedTracking    = false;
+    bool  bCachedHasMoved    = false;
 };

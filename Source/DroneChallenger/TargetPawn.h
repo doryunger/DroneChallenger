@@ -55,7 +55,8 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Target|Tracking") float CurrentTrackingTime = 0.0f;
 	UPROPERTY(BlueprintReadOnly, Category = "Target|Tracking") float BestTrackingTime = 0.0f;
 	[[nodiscard]] const FDroneGraph& GetGraph() const { return Graph; }
-	[[nodiscard]] bool IsDroneInFOV() const { return bDroneInFOV; }
+	[[nodiscard]] bool IsDroneInFOV()      const { return bDroneInFOV; }
+	[[nodiscard]] bool HasDroneMoved()     const { return bDroneHasEverMoved; }
 	[[nodiscard]] bool IsHUDServerRunning() const;
 
 private:
@@ -107,6 +108,7 @@ private:
 	bool bDroneInCaptureRange = false;
 	bool bDroneHasLOS = false;
 	bool bOnEvadePath = false;
+	bool bDroneHasEverMoved = false;
 	float CaptureTimer = 0.0f;
 	float LastDeltaTime = 0.0f;
 	float CurrentSpeed = 0.0f;
