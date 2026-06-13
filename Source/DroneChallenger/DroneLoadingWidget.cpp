@@ -3,6 +3,73 @@
 #include "Styling/CoreStyle.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Fonts/FontMeasure.h"
+#include "Misc/FileHelper.h"
+#include "IImageWrapperModule.h"
+#include "IImageWrapper.h"
+#include "Modules/ModuleManager.h"
+#include "Engine/Texture2D.h"
+
+static constexpr float CrossDuration = 1.5f;
+static constexpr float WaitDuration  = 1.5f;
+
+UTexture2D* UDroneLoadingWidget::LoadPNGTexture(const FString& Path)
+{
+    TArray<uint8> FileData;
+    if (!FFileHelper::LoadFileToArray(FileData, *Path))
+        return nullptr;
+
+    IImageWrapperModule& IWM = FModuleManager::LoadModuleChecked<IImageWrapperModule>(TEXT("ImageWrapper"));
+    TSharedPtr<IImageWrapper> IW = IWM.CreateImageWrapper(EImageFormat::PNG);
+    if (!IW.IsValid() || !IW->SetCompressed(FileData.GetData(), FileData.Num()))
+        return nullptr;
+
+    TArray<uint8> Raw;
+    if (!IW->GetRaw(ERGBFormat::BGRA, 8, Raw))
+        return nullptr;
+
+    UTexture2D* Tex = UTexture2D::CreateTransient(IW->GetWidth(), IW->GetHeight(), PF_B8G8R8A8);
+    if (!Tex)
+        return nullptr;
+
+    FTexture2DMipMap& Mip = Tex->GetPlatformData()->Mips[0];
+    void* Data = Mip.BulkData.Lock(LOCK_READ_WRITE);
+    FMemory::Memcpy(Data, Raw.GetData(), Raw.Num());
+    Mip.BulkData.Unlock();
+    Tex->UpdateResource();
+    return Tex;
+}
+
+void UDroneLoadingWidget::NativeConstruct()
+{
+    Super::NativeConstruct();
+
+    const FString Base = FPaths::ProjectDir() / TEXT("HUD/");
+
+    CarTex   = LoadPNGTexture(Base + TEXT("silhouette_car.png"));
+    DroneTex = LoadPNGTexture(Base + TEXT("silhouette_drone.png"));
+
+    if (CarTex)
+    {
+        CarTex->AddToRoot();
+        CarBrush = MakeShared<FSlateDynamicImageBrush>(
+            CarTex, FVector2D(CarTex->GetSizeX(), CarTex->GetSizeY()), FName("LoadingCarSil"));
+    }
+    if (DroneTex)
+    {
+        DroneTex->AddToRoot();
+        DroneBrush = MakeShared<FSlateDynamicImageBrush>(
+            DroneTex, FVector2D(DroneTex->GetSizeX(), DroneTex->GetSizeY()), FName("LoadingDroneSil"));
+    }
+}
+
+void UDroneLoadingWidget::NativeDestruct()
+{
+    CarBrush.Reset();
+    DroneBrush.Reset();
+    if (CarTex)   { CarTex->RemoveFromRoot();   CarTex   = nullptr; }
+    if (DroneTex) { DroneTex->RemoveFromRoot(); DroneTex = nullptr; }
+    Super::NativeDestruct();
+}
 
 void UDroneLoadingWidget::Dismiss()
 {
@@ -13,6 +80,7 @@ void UDroneLoadingWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
     ElapsedTime += InDeltaTime;
+
     if (bDismissed)
     {
         FadeAlpha -= InDeltaTime / 0.8f;
@@ -21,6 +89,25 @@ void UDroneLoadingWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
             FadeAlpha = 0.f;
             RemoveFromParent();
         }
+        return;
+    }
+
+    PhaseTimer += InDeltaTime;
+
+    switch (Phase)
+    {
+    case EPhase::CarCross:
+        if (PhaseTimer >= CrossDuration) { Phase = EPhase::CarWait;    PhaseTimer = 0.f; }
+        break;
+    case EPhase::CarWait:
+        if (PhaseTimer >= WaitDuration)  { Phase = EPhase::DroneCross; PhaseTimer = 0.f; }
+        break;
+    case EPhase::DroneCross:
+        if (PhaseTimer >= CrossDuration) { Phase = EPhase::DroneWait;  PhaseTimer = 0.f; }
+        break;
+    case EPhase::DroneWait:
+        if (PhaseTimer >= WaitDuration)  { Phase = EPhase::CarCross;   PhaseTimer = 0.f; }
+        break;
     }
 }
 
@@ -106,6 +193,54 @@ int32 UDroneLoadingWidget::NativePaint(
 
         CurX += CW;
     }
+    ++LayerId;
 
-    return LayerId + 1;
+    const bool bCrossing = (Phase == EPhase::CarCross || Phase == EPhase::DroneCross);
+    if (bCrossing)
+    {
+        const TSharedPtr<FSlateDynamicImageBrush>& ActiveBrush =
+            (Phase == EPhase::CarCross) ? CarBrush : DroneBrush;
+
+        if (ActiveBrush.IsValid())
+        {
+            const float Progress = FMath::Clamp(PhaseTimer / CrossDuration, 0.f, 1.f);
+
+            // Scale: 75% at edges, 250% at center
+            const float Scale = 0.75f + 1.75f * FMath::Sin(Progress * UE_PI);
+
+            const FVector2D NatSz = ActiveBrush->ImageSize;
+            const float AspR  = NatSz.Y > 0.0 ? NatSz.X / NatSz.Y : 1.0f;
+            const float BaseH = CharH * 0.7f;
+            const float BaseW = BaseH * AspR;
+            const float DrawH = BaseH * Scale;
+            const float DrawW = BaseW * Scale;
+
+            // X: 15% buffer beyond each end of the text
+            const float Buffer  = TotalW * 0.50f;
+            const float StartCX = BaseX - Buffer - BaseW * 0.5f;
+            const float EndCX   = BaseX + TotalW + Buffer + BaseW * 0.5f;
+            const float CenterX = StartCX + Progress * (EndCX - StartCX);
+            const float DrawX   = CenterX - DrawW * 0.5f;
+
+            // Y: vertically centered on the text — no vertical movement
+            const float TextCenterY = BaseY + CharH * 0.5f;
+            const float DrawY       = TextCenterY - DrawH * 0.5f;
+
+            const float FadeIn    = FMath::Clamp(Progress / 0.2f, 0.f, 1.f);
+            const float FadeOut   = FMath::Clamp((1.f - Progress) / 0.2f, 0.f, 1.f);
+            const float IconAlpha = FMath::Min(FadeIn, FadeOut) * FadeAlpha;
+
+            FSlateDrawElement::MakeBox(
+                OutDrawElements, LayerId,
+                AllottedGeometry.ToPaintGeometry(
+                    FVector2f(DrawW, DrawH),
+                    FSlateLayoutTransform(FVector2f(DrawX, DrawY))),
+                ActiveBrush.Get(),
+                ESlateDrawEffect::None,
+                FLinearColor(1.f, 1.f, 1.f, IconAlpha));
+            ++LayerId;
+        }
+    }
+
+    return LayerId;
 }
