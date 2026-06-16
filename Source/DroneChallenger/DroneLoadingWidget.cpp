@@ -92,6 +92,8 @@ void UDroneLoadingWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
         return;
     }
 
+    if (ElapsedTime < 3.f) return;
+
     PhaseTimer += InDeltaTime;
 
     switch (Phase)
@@ -132,7 +134,7 @@ int32 UDroneLoadingWidget::NativePaint(
         FLinearColor(0.f, 0.f, 0.f, FadeAlpha));
     ++LayerId;
 
-    const int32 FontSz = FMath::Clamp(FMath::RoundToInt(S * 0.038f), 14, 48);
+    const int32 FontSz = FMath::Clamp(FMath::RoundToInt(S * 0.114f), 42, 144);
     const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Bold", FontSz);
 
     const auto& MeasureService = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
@@ -210,7 +212,7 @@ int32 UDroneLoadingWidget::NativePaint(
 
             const FVector2D NatSz = ActiveBrush->ImageSize;
             const float AspR  = NatSz.Y > 0.0 ? NatSz.X / NatSz.Y : 1.0f;
-            const float BaseH = CharH * 0.7f;
+            const float BaseH = CharH * 0.35f;
             const float BaseW = BaseH * AspR;
             const float DrawH = BaseH * Scale;
             const float DrawW = BaseW * Scale;
