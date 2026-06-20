@@ -1,6 +1,8 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Materials/MaterialInterface.h"
+#include "Styling/SlateBrush.h"
 #include "DroneMainMenuWidget.generated.h"
 
 DECLARE_DELEGATE(FOnMenuContinue);
@@ -36,10 +38,19 @@ private:
     mutable FVector2D CtaMax  = FVector2D::ZeroVector;
     mutable FVector2D MousePos = FVector2D::ZeroVector;
 
+    UPROPERTY() TObjectPtr<UMaterialInterface> CarMat;
+    FSlateBrush    CarBrush;
+    bool           bCarBrushReady = false;
+
+    UPROPERTY() TObjectPtr<UMaterialInterface> DroneMat;
+    FSlateBrush    DroneBrush;
+    bool           bDroneBrushReady = false;
+
     static float PixelWordWidth(const FString& Word, float PixelW);
 
     void DrawPixelWord(const FGeometry& Geom, FSlateWindowElementList& Out, int32& Layer,
-        const FString& Word, float StartX, float TopY, float PixelW, float Alpha) const;
+        const FString& Word, float StartX, float TopY, float PixelW, float Alpha,
+        FLinearColor FlatColor = FLinearColor(0.f, 0.f, 0.f, 0.f)) const;
 
     void DrawTitleScreen(const FGeometry& Geom, FSlateWindowElementList& Out, int32& Layer) const;
     void DrawDialogScreen(const FGeometry& Geom, FSlateWindowElementList& Out, int32& Layer) const;
