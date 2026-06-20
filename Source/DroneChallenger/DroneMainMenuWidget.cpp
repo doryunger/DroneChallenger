@@ -4,6 +4,7 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Fonts/FontMeasure.h"
 #include "InputCoreTypes.h"
+#include "Engine/TextureRenderTarget2D.h"
 
 static void SlateBox(const FGeometry& Geom, FSlateWindowElementList& Out, int32 Layer,
     float X, float Y, float W, float H, const FLinearColor& Col)
@@ -29,10 +30,12 @@ static const FPixelGlyph GlyphL = {{ 16, 16, 16, 16, 16, 16, 31 }};
 static const FPixelGlyph GlyphM = {{ 17, 27, 21, 17, 17, 17, 17 }};
 static const FPixelGlyph GlyphN = {{ 17, 25, 21, 19, 17, 17, 17 }};
 static const FPixelGlyph GlyphO = {{ 14, 17, 17, 17, 17, 17, 14 }};
+static const FPixelGlyph GlyphP = {{ 30, 17, 17, 30, 16, 16, 16 }};
 static const FPixelGlyph GlyphR = {{ 30, 17, 17, 30, 20, 18, 17 }};
 static const FPixelGlyph GlyphS = {{ 14, 17, 16, 14,  1, 17, 14 }};
 static const FPixelGlyph GlyphT = {{ 31,  4,  4,  4,  4,  4,  4 }};
 static const FPixelGlyph GlyphU = {{ 17, 17, 17, 17, 17, 17, 14 }};
+static const FPixelGlyph GlyphY = {{ 17, 17, 10,  4,  4,  4,  4 }};
 
 static const FPixelGlyph* GetPixelGlyph(TCHAR C)
 {
@@ -52,10 +55,12 @@ static const FPixelGlyph* GetPixelGlyph(TCHAR C)
     case 'M': return &GlyphM;
     case 'N': return &GlyphN;
     case 'O': return &GlyphO;
+    case 'P': return &GlyphP;
     case 'R': return &GlyphR;
     case 'S': return &GlyphS;
     case 'T': return &GlyphT;
     case 'U': return &GlyphU;
+    case 'Y': return &GlyphY;
     default:  return nullptr;
     }
 }
@@ -68,8 +73,10 @@ float UDroneMainMenuWidget::PixelWordWidth(const FString& Word, float PixelW)
 
 void UDroneMainMenuWidget::DrawPixelWord(
     const FGeometry& Geom, FSlateWindowElementList& Out, int32& Layer,
-    const FString& Word, float StartX, float TopY, float PixelW, float Alpha) const
+    const FString& Word, float StartX, float TopY, float PixelW, float Alpha,
+    FLinearColor FlatColor) const
 {
+    const bool bFlat = FlatColor.A > 0.f;
     static const FLinearColor Gradient[7] = {
         FLinearColor(1.00f, 0.98f, 0.72f),
         FLinearColor(1.00f, 0.90f, 0.35f),
@@ -89,7 +96,7 @@ void UDroneMainMenuWidget::DrawPixelWord(
         {
             for (int32 row = 0; row < 7; ++row)
             {
-                FLinearColor Col = Gradient[row];
+                FLinearColor Col = bFlat ? FlatColor : Gradient[row];
                 Col.A = Alpha;
                 for (int32 col = 0; col < 5; ++col)
                     if (G->Rows[row] & (1u << (4 - col)))
@@ -136,27 +143,37 @@ void UDroneMainMenuWidget::DrawTitleScreen(
 
     if (State != EMenuState::Dialog)
     {
-        const float FlashAlpha = (FMath::Sin(ElapsedTime * 3.2f) * 0.5f + 0.5f) * FadeAlpha;
-        const float S   = FMath::Min(W, H);
-        const int32 Sz3 = FMath::Clamp(FMath::RoundToInt(S * 0.040f), 16, 48);
-        const FSlateFontInfo F3 = FCoreStyle::GetDefaultFontStyle("Bold", Sz3);
+        const float FlashAlpha  = (FMath::Sin(ElapsedTime * 3.2f) * 0.5f + 0.5f) * FadeAlpha;
         const FString PressText = TEXT("PRESS ANY KEY TO START");
-        const auto& MS  = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
-        const float PressW = (float)MS->Measure(PressText, F3).X;
-        const float PressH = (float)MS->Measure(PressText, F3).Y;
-        const float PressX = (W - PressW) * 0.5f;
-        const float PressY = H * 0.72f;
+        const float PressPixelW = FMath::Max(2.f, FMath::Floor(PixelW * 0.43f));
+        const float PressW      = PixelWordWidth(PressText, PressPixelW);
+        const float PressX      = (W - PressW) * 0.5f;
+        const float PressY      = H * 0.46f;
+        DrawPixelWord(Geom, Out, Layer, PressText, PressX, PressY, PressPixelW, FlashAlpha,
+            FLinearColor(1.0f, 0.84f, 0.0f, 1.0f));
+    }
 
-        FSlateDrawElement::MakeText(Out, Layer,
-            Geom.ToPaintGeometry(FVector2f(PressW + 4.f, PressH + 4.f),
-                FSlateLayoutTransform(FVector2f(PressX + 2.f, PressY + 2.f))),
-            FText::FromString(PressText), F3, ESlateDrawEffect::None,
-            FLinearColor(0.00f, 0.00f, 0.00f, FlashAlpha * 0.90f));
-        FSlateDrawElement::MakeText(Out, Layer,
-            Geom.ToPaintGeometry(FVector2f(PressW + 4.f, PressH + 4.f),
-                FSlateLayoutTransform(FVector2f(PressX, PressY))),
-            FText::FromString(PressText), F3, ESlateDrawEffect::None,
-            FLinearColor(1.00f, 0.94f, 0.30f, FlashAlpha));
+    if (bDroneBrushReady)
+    {
+        const float DroneW = W * 0.28f;
+        const float DroneH = DroneW;
+        FSlateDrawElement::MakeBox(Out, Layer,
+            Geom.ToPaintGeometry(FVector2f(DroneW, DroneH),
+                FSlateLayoutTransform(FVector2f(W * 0.08f, H * 0.38f))),
+            &DroneBrush, ESlateDrawEffect::None,
+            FLinearColor(1.f, 1.f, 1.f, FadeAlpha));
+        ++Layer;
+    }
+
+    if (bCarBrushReady)
+    {
+        const float CarW = W * 0.48f;
+        const float CarH = CarW * (72.f / 128.f);
+        FSlateDrawElement::MakeBox(Out, Layer,
+            Geom.ToPaintGeometry(FVector2f(CarW, CarH),
+                FSlateLayoutTransform(FVector2f(W * 0.54f, H * 0.42f))),
+            &CarBrush, ESlateDrawEffect::None,
+            FLinearColor(1.f, 1.f, 1.f, FadeAlpha));
         ++Layer;
     }
 }
@@ -314,6 +331,36 @@ void UDroneMainMenuWidget::NativeConstruct()
     Super::NativeConstruct();
     SetIsFocusable(true);
     SetVisibility(ESlateVisibility::Visible);
+
+    UTextureRenderTarget2D* RT = LoadObject<UTextureRenderTarget2D>(nullptr, TEXT("/Game/RT_CarPreview"));
+    if (RT)
+    {
+        RT->Filter = TF_Nearest;
+        RT->UpdateResource();
+    }
+
+    CarMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/M_CarPreview"));
+    if (CarMat)
+    {
+        CarBrush.SetResourceObject(CarMat);
+        CarBrush.ImageSize = FVector2D(128.f, 72.f);
+        bCarBrushReady = true;
+    }
+
+    UTextureRenderTarget2D* DroneRT = LoadObject<UTextureRenderTarget2D>(nullptr, TEXT("/Game/RT_DronePreview"));
+    if (DroneRT)
+    {
+        DroneRT->Filter = TF_Nearest;
+        DroneRT->UpdateResource();
+    }
+
+    DroneMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/M_DronePreview"));
+    if (DroneMat)
+    {
+        DroneBrush.SetResourceObject(DroneMat);
+        DroneBrush.ImageSize = FVector2D(128.f, 128.f);
+        bDroneBrushReady = true;
+    }
 }
 
 bool UDroneMainMenuWidget::NativeSupportsKeyboardFocus() const
