@@ -10,6 +10,8 @@ struct FHUDState
 	float AltM  = 0.f;
 	float TargetX = 0.f, TargetY = 0.f, TargetZ = 0.f;
 	bool  bTargetInFOV = false;
+	float FovDeg     = 90.f;
+	float DetRangeCm = 20000.f;
 };
 
 class FDroneHUDServer : public FRunnable

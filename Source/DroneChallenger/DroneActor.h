@@ -123,13 +123,15 @@ private:
 	FDroneControlInput ControlInput;
 	FDroneControlInput SmoothedInput;
 
-	bool bFPVMode = false;
+	bool bFPVMode   = false;
+	bool bGameOver  = false;
 
 	void InitHoverThrottle();
 	void ApplyRotorForces();
 	void UpdateRotorVisuals(float DeltaTime);
 	void UpdateMotorAudio();
 	void RegisterInputMappingContext(AController* InController);
+	void NotifyCrash();
 
 	void OnThrottle(const FInputActionValue& Value);
 	void OnThrottleCompleted(const FInputActionValue& Value);
@@ -138,4 +140,8 @@ private:
 	void OnYaw(const FInputActionValue& Value);
 	void OnYawCompleted(const FInputActionValue& Value);
 	void OnSwitchCamera(const FInputActionValue& Value);
+
+	UFUNCTION()
+	void OnPhysicsHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
+		UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 };

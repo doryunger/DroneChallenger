@@ -9,6 +9,7 @@ class UDronePFDWidget;
 class UDroneCrosshairWidget;
 class UMiniMapWidget;
 class UDroneLoadingWidget;
+class UDroneResultWidget;
 class ADroneActor;
 class ATargetPawn;
 
@@ -42,8 +43,8 @@ private:
     UPROPERTY() TObjectPtr<UDronePFDWidget>       PFDWidget;
     UPROPERTY() TObjectPtr<UDroneCrosshairWidget> CrosshairWidget;
     UPROPERTY() TObjectPtr<UDroneLoadingWidget>   LoadingWidget;
-
-    bool bMiniMapPositioned = false;
+    UPROPERTY() TObjectPtr<UDroneResultWidget>    ResultWidget;
 
     void OnSceneReady();
+    void OnGameEnded(bool bWon);
 };

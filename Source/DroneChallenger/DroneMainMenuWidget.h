@@ -32,7 +32,8 @@ private:
     EMenuState State       = EMenuState::Title;
     float      ElapsedTime = 0.f;
     float      FadeAlpha   = 1.f;
-    bool       bDismissing = false;
+    bool       bDismissing    = false;
+    bool       bContinueFired = false;
 
     mutable FVector2D CtaMin  = FVector2D::ZeroVector;
     mutable FVector2D CtaMax  = FVector2D::ZeroVector;

@@ -2,7 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Rendering/DrawElements.h"
 #include "BTDisplayWidget.generated.h"
+
+class UButton;
 
 UCLASS()
 class DRONECHALLENGER_API UBTDisplayWidget : public UUserWidget
@@ -19,6 +22,20 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "BT")
 	FString GetMonitorURL() const;
 
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "BT")
+	FText GetToggleLabel() const;
+
 	UFUNCTION(BlueprintCallable, Category = "BT")
 	void TogglePanel();
+
+protected:
+	virtual void NativeConstruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,
+		const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
+		int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
+
+private:
+	float StripePhase = 0.f;
+	mutable UButton* CachedBtn = nullptr;
 };

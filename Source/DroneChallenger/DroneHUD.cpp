@@ -4,12 +4,15 @@
 #include "DronePFDWidget.h"
 #include "DroneCrosshairWidget.h"
 #include "DroneLoadingWidget.h"
+#include "DroneResultWidget.h"
+#include "DroneGameMode.h"
 #include "DroneActor.h"
 #include "TargetPawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/Canvas.h"
 #include "MiniMapWidget.h"
+#include "Blueprint/GameViewportSubsystem.h"
 
 void ADroneHUD::BeginPlay()
 {
@@ -73,6 +76,16 @@ void ADroneHUD::BeginPlay()
     LoadingWidget = CreateWidget<UDroneLoadingWidget>(GetWorld(), UDroneLoadingWidget::StaticClass());
     if (LoadingWidget)
         LoadingWidget->AddToViewport(10);
+
+    ResultWidget = CreateWidget<UDroneResultWidget>(GetWorld(), UDroneResultWidget::StaticClass());
+    if (ResultWidget)
+    {
+        ResultWidget->AddToViewport(20);
+        ResultWidget->SetVisibility(ESlateVisibility::Collapsed);
+    }
+
+    if (ADroneGameMode* GM = GetWorld()->GetAuthGameMode<ADroneGameMode>())
+        GM->OnGameEnded.AddUObject(this, &ADroneHUD::OnGameEnded);
 }
 
 void ADroneHUD::OnSceneReady()
@@ -85,19 +98,31 @@ void ADroneHUD::DrawHUD()
 {
     Super::DrawHUD();
 
-    if (bMiniMapPositioned || !MiniMapBrowser || !Canvas) return;
-    bMiniMapPositioned = true;
+    if (!MiniMapBrowser || !Canvas) return;
 
-    const FVector2D VP(Canvas->SizeX, Canvas->SizeY);
+    FVector2D VP(Canvas->SizeX, Canvas->SizeY);
+    if (UGameViewportClient* GVC = GetWorld() ? GetWorld()->GetGameViewport() : nullptr)
+        GVC->GetViewportSize(VP);
+
     const float mmMargin = FMath::Min(VP.X, VP.Y) * 0.018f;
-    const float mmSize   = FMath::Min(VP.X * 0.32f, VP.Y * 0.52f);
-    const float R_pfd      = FMath::Min(VP.X * 0.1024f, VP.Y * 0.165f);
-    const float mmCenterY  = VP.Y * 1.01f - R_pfd;
+    const float mmSize   = FMath::Min(VP.X * 0.24f, VP.Y * 0.39f);
 
-    MiniMapBrowser->SetDesiredSizeInViewport(FVector2D(mmSize, mmSize));
-    MiniMapBrowser->SetPositionInViewport(FVector2D(mmMargin, mmCenterY - mmSize * 0.5f));
+    if (UGameViewportSubsystem* Sub = UGameViewportSubsystem::Get(GetWorld()))
+    {
+        FGameViewportWidgetSlot Slot = Sub->GetWidgetSlot(MiniMapBrowser);
+        Slot.Anchors   = FAnchors(0.f, 1.f);
+        Slot.Alignment = FVector2D(0.f, 1.f);
+        Slot.Offsets   = FMargin(mmMargin, mmSize * (0.05), mmSize, mmSize);
+        Sub->SetWidgetSlot(MiniMapBrowser, Slot);
+    }
 }
 
 void ADroneHUD::NotifyHUDServerReady()
 {
+}
+
+void ADroneHUD::OnGameEnded(bool bWon)
+{
+    if (ResultWidget)
+        ResultWidget->ShowResult(bWon);
 }

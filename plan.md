@@ -78,87 +78,145 @@ Prebuilt External UBT module (`Source/ThirdParty/ArboristLib/`). Single static l
 - 1 m capture radius; beacon state driven by BT actions
 - `MonitorServer` on port 8080 serving `HUD/arborist/viewer/viewer.html`
 
-### Phase 7e — BT visualiser panel ✅
-- `ADroneHUD` + `UBTDisplayWidget` (C++) wired to `WBP_BTDisplay` Blueprint
-- `WebBrowserWidget` loads `http://localhost:8080` — live BT tree alongside gameplay
-- Toggleable panel via `TogglePanel()`
+### Phase 7 — HUD ✅ (C++ complete, Blueprint wiring pending)
 
----
+**Goal**: in-game UMG overlay providing flight data, spatial awareness, and tracking score. All five widgets are implemented in C++ and instantiated by `ADroneHUD::BeginPlay()`. Blueprint wiring for the two class-assigned widgets (`PFD`, `Crosshair`) is deferred to Phase 8.
 
-## Current phase — Phase 7: HUD
+#### ADroneHUD
+`ADroneHUD` is the single aggregator. In `BeginPlay()` it resolves `ADroneActor` and `ATargetPawn` via `GetActorOfClass`, creates all five widgets, and adds them to the viewport. A loading screen (`UDroneLoadingWidget`) is shown at z-order 10 and dismissed when `ATargetPawn::OnAltitudeStable` fires — guaranteeing Cesium terrain is streamed before the player sees the world. `DrawHUD()` runs once to compute viewport-relative positions for the mini map and PFD, then sets the `bMiniMapPositioned` flag so it never runs again.
 
-**Goal**: in-game UMG overlay providing flight data, spatial awareness, and tracking score.
+#### 7a — Tracking stats
+`UDroneTrackingWidget` — NativePaint widget. Instantiated directly via `StaticClass()` (no Blueprint class needed). Holds a `TObjectPtr` to both `ADroneActor` and `ATargetPawn`; reads tracking state from `ATargetPawn` each tick. Exposes `GetCurrentTimeText()`, `GetBestTimeText()`, and `GetTrackingColor()` as `BlueprintPure` for optional Blueprint text binding. Color shifts when actively tracking.
 
-### 7a — Tracking stats ✅ (C++ complete, Blueprint pending)
+#### 7b — Mini map
+`UMiniMapWidget` — wraps `UWebBrowser`. Instantiated directly via `StaticClass()`. On `NativeConstruct` it binds the browser and loads a local HTML file: `HUD/minimap/minimap.html` converted to an absolute `file:///` URL. The widget is added to the viewport at opacity 0 and made visible only after `OnAltitudeStable` fires. Position and size are set in `ADroneHUD::DrawHUD()` relative to viewport dimensions and PFD radius, keeping the mini map flush with the PFD disc.
 
-`UDroneTrackingWidget` — exposes three BlueprintPure functions:
-- `GetCurrentTrackingTime()` — seconds target has been in FOV continuously this streak
-- `GetBestTrackingTime()` — longest streak this session
-- `IsCurrentlyTracking()` — true while drone_in_fov is active
+#### 7c — PFD (Primary Flight Display)
+`UDronePFDWidget` — NativePaint widget. Wired via `PFDWidgetClass` `UPROPERTY` in `BP_DroneHUD`. Caches pitch, roll, speed (m/s), altitude (m), and vertical speed (m/s) from `ADroneActor` each tick. Renders a moving horizon line (tilts with roll, shifts vertically with pitch), speed tape, altitude tape, and vertical speed indicator. `MaxDisplayPitchDeg` is `EditDefaultsOnly` for designer tuning.
 
-Tracking logic lives in `ATargetPawn::Tick()` — increments `CurrentTrackingTime` while `bDroneInFOV`, resets on loss of contact, updates `BestTrackingTime` on new high.
+#### 7d — Crosshair
+`UDroneCrosshairWidget` — NativePaint widget. Wired via `CrosshairWidgetClass` `UPROPERTY` in `BP_DroneHUD`. Caches `bCachedFPVMode` from `ADroneActor` each tick and adapts the crosshair style between chase-camera and FPV-camera modes.
 
-**Remaining**: create `WBP_TrackingDisplay` UMG widget in editor; bind Blueprint text blocks to the three functions; anchor to top-left or top-right of screen.
-
-### 7b — Mini map ✅ (C++ complete, Blueprint pending)
-
-`UDroneMiniMapWidget` — NativePaint renders:
-- Road network from `DroneGraph` (nodes/edges projected to 2D, 500 m radius)
-- North-up map; heading indicator tick on compass ring
-- N / E / S / W labels on ring edge
-- 2D FOV frustum cone from drone icon (90° horizontal, detection range length)
-- Drone arrow at center; target dot (yellow when in FOV, red otherwise)
-
-**Remaining**: create `WBP_MiniMap` in editor; set widget size (e.g., 220 × 220); anchor to corner; assign `WBP_MiniMap` class to `ADroneHUD::MiniMapWidgetClass` in `BP_DroneHUD`.
-
-### 7c — Attitude arc ✅ (C++ complete, Blueprint pending)
-
-`UDroneAttitudeWidget` — NativePaint renders:
-- Semicircular arc border with horizontal wings (∩ shape)
-- Moving horizon line: tilts with roll, shifts vertically with pitch
-- Fixed reference wings marking level flight
-- Pitch scale ticks at ±10° and ±20°
-
-Placed below the drone center crosshair.
-
-**Remaining**: create `WBP_AttitudeArc` in editor; anchor to screen center + offset down; assign class in `BP_DroneHUD`.
+#### 7e — BT display panel ✅
+`UBTDisplayWidget` — wraps `WebBrowserWidget` pointed at `http://localhost:[MonitorPort]` (default 8080). `TogglePanel()` flips `bExpanded` (BlueprintReadWrite) so the Blueprint can animate open/close. `GetMonitorURL()` is BlueprintPure. Wired via `BTDisplayWidgetClass` `UPROPERTY`; Blueprint `WBP_BTDisplay` already created and assigned in `BP_DroneHUD`.
 
 ---
 
 ## Planned phases
 
-### Phase 8 — Telemetry bar
-- Speed (m/s), altitude AGL (m), heading (°)
-- Single horizontal bar at bottom of screen
-- Data from `ADroneActor::GetVelocity()`, `GetActorLocation().Z`, `GetActorRotation().Yaw`
+### Phase 8 — UI Polish + Flight Feel ✅
 
-### Phase 9 — Hunting mode timer
-- 30 s warmup indicator at session start (countdown before capture zone activates)
-- Capture hold timer (counts up while within 1 m after warmup)
-- Logic lives in `ATargetPawn` or a dedicated game mode
+**Result screen**
+- `UDroneResultWidget` (new) — YOU WIN / YOU LOSE screen with 5×7 pixel art title, three-layer depth shadow, shimmer sweep, and gold gradient; ellipse-shaped TRY AGAIN button with scanline fill, gold ring, hover color change (black → bright gray fill, gold → bright-gold ring), and mouse cursor change; clicking reloads the level
 
-### Phase 10 — Settings menu
-- Pause on Escape; sliders for PID gains and flight envelope parameters
-- Persisted via `UGameUserSettings` subclass
+**Main menu layout**
+- All elements shifted up ~10% of screen height; title, subtitle, and car/drone previews now correctly distributed with the car fully visible (was clipped 22 px below the bottom at 1080p)
+- BT toggle button text centered with symmetric padding (`NormalPadding = FMargin(12, 4)`, slot changed from `HAlign_Fill` to `HAlign_Center`)
+- Minimap widget reduced to 75% of previous size while keeping bottom-left anchor
 
-### Phase 11 — Packaging
-- Windows 64-bit shipping build
-- Arborist setup script (`setup.ps1`) to rebuild the static lib on fresh machines
-- MonitorServer disabled in shipping (`#if !UE_BUILD_SHIPPING`)
+**Minimap ↔ detection sync**
+- `FHUDState` extended with `FovDeg` and `DetRangeCm`; both broadcast from `ATargetPawn::Tick` every frame
+- `minimap.js` reads `fovDeg` / `detRangeCm` from the WebSocket state; cone now matches actual detection zone exactly (was 500 m / ~145°, now 200 m / 90°)
+- `DetectionFovDeg` UPROPERTY on `ATargetPawn` replaces hardcoded `0.3f` dot threshold in `ComputeDroneInFOV`
+
+**LOS 2D pre-filter**
+- `UpdateDroneState()` gates the three `LineTraceSingleByChannel` calls behind a cheap 2D (XY-plane) distance and angular check; all three traces are skipped when the drone is clearly outside the detection cone
+- Angular filter is bypassed when drone forward vector has negligible horizontal component (steep pitch), letting the 3D check decide
+
+**Roll input (D / A keys)**
+- `ControlInput.Roll` now set directly in `ADroneActor::Tick` via `IsInputKeyDown(EKeys::D/A)`; self-clears when released; unaffected by IMC asset configuration
+- Roll axis removed from `OnPitchRoll` / `OnPitchRollCompleted` (arrow-key left/right no longer controls roll)
+
+**Tilt recovery**
+- `bRollCorrects` / `bPitchCorrects` extended with a tilt-angle term: `Atan2(ActorUp.Y, ActorUp.Z)` for roll, `Atan2(-ActorUp.X, ActorUp.Z)` for pitch; corrective input now bypasses `LimitScale` even when the drone is statically tilted beyond `MaxTiltAngleDeg` with near-zero angular velocity
+
+**Floor collision**
+- CCD enabled on `PhysicsBody` (`SetUseCCD(true)`) to prevent tunneling through thin Cesium terrain geometry
+- Crash threshold for upward-normal impacts (`ImpactNormal.Z > 0.5`) lowered from 400 cm/s to 150 cm/s
+
+### Phase 9 — Packaging
+- Enable **Pixel Streaming** plugin in the project (`Edit → Plugins → Pixel Streaming`)
+- Add launch flags to the packaged executable:
+  ```
+  DroneChallenger.exe -PixelStreamingIP=0.0.0.0 -PixelStreamingPort=8888 -AudioMixer -RenderOffScreen
+  ```
+- Disable MonitorServer in shipping (`#if !UE_BUILD_SHIPPING`) — BT visualiser is dev-only
+- Verify Cesium ion API key is a project-scoped key (not personal) before packaging
+- Windows 64-bit shipping build via `Project → Package Project → Windows`
+- Smoke test the packaged build locally before upload
+
+### Phase 10 — Cloud Deployment (Pixel Streaming on-demand)
+
+**Goal**: a recruiter clicks a URL, waits ~3–4 minutes, and plays the game live in their browser — no install.
+
+**Infrastructure**
+
+```
+Portfolio page (static, Vercel/Netlify — free)
+       │
+       ▼
+Wake Controller (AWS Lambda + API Gateway — free tier)
+       │
+       ├─ instance running? ──► return stream URL
+       └─ instance stopped? ──► call EC2 start_instances(), return "warming"
+              │
+              ▼
+GPU Instance (AWS g4dn.xlarge, stopped when idle)
+  ├── Epic Pixel Streaming Infrastructure (signaling server, TURN server)
+  └── DroneChallenger.exe (auto-launches with Pixel Streaming flags on boot)
+```
+
+**Components to set up**
+
+| Component | What it is | Cost |
+|---|---|---|
+| Elastic IP | Fixed public IP so the wake controller always knows the address | ~$3.65/month while stopped, free while running |
+| AWS Lambda (×2) | `POST /wake` — starts instance; `GET /status` — checks readiness | Free tier |
+| g4dn.xlarge | GPU instance; NVIDIA T4; runs the game + signaling server | ~$0.53/hr, only when running |
+| Auto-shutdown watchdog | Script on the instance: stop after 15 min of no WebRTC connections | $0 |
+
+**Instance startup sequence (auto, on boot)**
+1. Windows boots
+2. Startup task runs Epic signaling server (`node cirrus.js`)
+3. Startup task launches `DroneChallenger.exe` with Pixel Streaming flags
+4. Lambda `/status` polls `http://[elastic-ip]:80/` — returns `ready` when signaling server responds
+
+**User experience**
+```
+[Launch DroneChallenger]  ← button on portfolio page
+         │
+         ▼
+"Starting GPU session... (~3 minutes)"
+[████████░░░░░░░░░░░░]  ← frontend polls /status every 5 s
+         │  (signaling server responds)
+         ▼
+"Session ready. Connecting..."
+         │
+         ▼
+Pixel Stream in the same browser tab
+```
+
+**Session limits**
+- Max session: 20 minutes (watchdog stops the instance)
+- If no connection after 5 minutes of starting: auto-stop (failed launch guard)
+
+**Cesium note**: Cesium tile requests originate from the server during Pixel Streaming (the game runs server-side). Ensure the Cesium ion project-scoped key has sufficient tile request quota for server-side rendering.
+
+**Estimated cost for portfolio use**: ~5 recruiter sessions × 20 min = ~$1/month in GPU time + ~$3.65/month Elastic IP = **under $5/month total**.
 
 ---
 
 ## Open items
 
-| Item | Status |
-|---|---|
-| WBP_TrackingDisplay Blueprint | Not started |
-| WBP_MiniMap Blueprint | Not started |
-| WBP_AttitudeArc Blueprint | Not started |
-| Hunting mode 30 s warmup logic | Not started |
-| Telemetry bar | Not started |
-| Arborist setup script | Deferred to Phase 11 |
-| Multi-target switching in MonitorServer | Not needed for single-target mode |
+| Item | Phase | Status |
+|---|---|---|
+| Pixel Streaming plugin enable + launch flags | 9 | Not started |
+| Cesium ion project-scoped API key | 9 | Not started |
+| Windows 64-bit shipping build | 9 | Not started |
+| AWS infrastructure (Lambda, Elastic IP, g4dn) | 10 | Not started |
+| Epic Pixel Streaming Infrastructure on instance | 10 | Not started |
+| Auto-shutdown watchdog script | 10 | Not started |
+| Portfolio page with wake UI + status polling | 10 | Not started |
 
 ---
 
@@ -193,8 +251,12 @@ DroneChallenger/
         ├── DroneHUD.h/.cpp
         ├── BTDisplayWidget.h/.cpp
         ├── DroneTrackingWidget.h/.cpp
-        ├── DroneMiniMapWidget.h/.cpp
-        ├── DroneAttitudeWidget.h/.cpp
+        ├── MiniMapWidget.h/.cpp
+        ├── DronePFDWidget.h/.cpp
+        ├── DroneCrosshairWidget.h/.cpp
+        ├── DroneLoadingWidget.h/.cpp
+        ├── DroneResultWidget.h/.cpp
+        ├── DroneMainMenuWidget.h/.cpp
         ├── DroneGameMode.h/.cpp
         └── DroneChallenger.Build.cs
 ```

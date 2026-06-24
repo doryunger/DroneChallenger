@@ -1,4 +1,5 @@
 #include "TargetPawn.h"
+#include "DroneGameMode.h"
 #include "DroneHUD.h"
 #include "DroneHUDServer.h"
 #include "TargetAIController.h"
@@ -130,6 +131,7 @@ void ATargetPawn::BeginPlay()
 	static constexpr float RuntimeMeshScale = 1.5f;
 	static constexpr float BeaconCenterM    = 50.0f;
 	BeaconPole->SetRelativeLocation(FVector(0.0f, 0.0f, BeaconCenterM * 100.0f / RuntimeMeshScale));
+	Beacon->SetRelativeLocation(FVector(0.0f, 0.0f, BeaconCenterM * 100.0f / RuntimeMeshScale));
 
 	DroneEditorPos = IsValid(CachedDrone)
 		? CachedDrone->GetActorLocation()
@@ -304,32 +306,42 @@ void ATargetPawn::Tick(float DeltaTime)
 		HS.TargetY     = TargPos.Y;
 		HS.TargetZ     = TargPos.Z;
 		HS.bTargetInFOV = bDroneInFOV;
+		HS.FovDeg       = DetectionFovDeg;
+		HS.DetRangeCm   = DetectionRange;
 		HUDServer->SetState(HS);
 	}
 
 	if (!bPlacementDone || !Tree) return;
 
+	const ADroneGameMode* GM = GetWorld()->GetAuthGameMode<ADroneGameMode>();
+	const bool bGameEnded = GM && GM->IsGameEnded();
+
 	LastDeltaTime = DeltaTime;
 	UpdateDroneState();
-	if (!bDroneHasEverMoved && CachedDrone &&
-	    CachedDrone->GetVelocity().SizeSquared() > 500.f)
-	{
-		bDroneHasEverMoved = true;
-	}
 
-	if (bDroneHasEverMoved)
+	if (!bGameEnded)
 	{
-		if (bDroneInFOV) {
-			CurrentTrackingTime += DeltaTime;
-			BestTrackingTime = FMath::Max(BestTrackingTime, CurrentTrackingTime);
-		} else if (bWasInFOV) {
-			CurrentTrackingTime = 0.0f;
+		if (!bDroneHasEverMoved && CachedDrone &&
+		    CachedDrone->GetVelocity().SizeSquared() > 500.f)
+		{
+			bDroneHasEverMoved = true;
 		}
+
+		if (bDroneHasEverMoved)
+		{
+			if (bDroneInFOV) {
+				CurrentTrackingTime += DeltaTime;
+				BestTrackingTime = FMath::Max(BestTrackingTime, CurrentTrackingTime);
+			} else if (bWasInFOV) {
+				CurrentTrackingTime = 0.0f;
+			}
+		}
+
+		bWasInFOV = bDroneInFOV;
+		Tree->tick();
+		if (HUDServer && Emitter && !Emitter->history().empty())
+			HUDServer->SetBTHistoryJson(SerializeHistory(Emitter->history()));
 	}
-	bWasInFOV = bDroneInFOV;
-	Tree->tick();
-	if (HUDServer && Emitter && !Emitter->history().empty())
-		HUDServer->SetBTHistoryJson(SerializeHistory(Emitter->history()));
 }
 
 void ATargetPawn::BuildTree()
@@ -525,54 +537,100 @@ void ATargetPawn::UpdateDroneState()
 {
 	if (bIsCaptured) return;
 
-	if (IsValid(CachedDrone))
+	auto Commit = [&]()
 	{
-		const float Dist = FVector::Distance(GetActorLocation(), CachedDrone->GetActorLocation());
-		bDroneInCaptureRange = (Dist <= CaptureRadius);
+		if (!bDroneInCaptureRange) CaptureTimer = 0.0f;
+		const bool bShow = !bDroneHasLOS;
+		if (BeaconPole->IsVisible() != bShow)
+		{
+			BeaconPole->SetVisibility(bShow);
+			BeaconBeamLight->SetVisibility(bShow);
+		}
+	};
 
-		FHitResult LOSHit;
-		FCollisionQueryParams LOSParams(NAME_None, false, this);
-		LOSParams.AddIgnoredActor(CachedDrone);
-		const bool bBlocked = GetWorld()->LineTraceSingleByChannel(
-			LOSHit,
-			GetActorLocation() + FVector(0.0f, 0.0f, 200.0f),
-			CachedDrone->GetActorLocation(),
-			ECC_Visibility, LOSParams);
-		bDroneHasLOS = !bBlocked;
-	}
-	else
+	if (!IsValid(CachedDrone))
 	{
 		bDroneInCaptureRange = false;
 		bDroneHasLOS         = false;
+		bDroneInFOV          = false;
+		Commit();
+		return;
+	}
+
+	const FVector CarPos3D   = GetActorLocation();
+	const FVector DronePos3D = CachedDrone->GetActorLocation();
+
+	// 2D pre-filter — XY plane only, skips the expensive LineTraces when the
+	// car is clearly outside the detection cone.
+	const float Dist2D = FMath::Sqrt(
+		FMath::Square(CarPos3D.X - DronePos3D.X) +
+		FMath::Square(CarPos3D.Y - DronePos3D.Y));
+
+	if (Dist2D > DetectionRange)
+	{
+		bDroneInCaptureRange = false;
+		bDroneHasLOS         = false;
+		bDroneInFOV          = false;
+		Commit();
+		return;
+	}
+
+	const FVector    DroneFwd3D  = CachedDrone->GetActorForwardVector();
+	const FVector2D  DroneFwd2D  = FVector2D(DroneFwd3D.X, DroneFwd3D.Y).GetSafeNormal();
+	const FVector2D  DirToCar2D  = FVector2D(CarPos3D.X - DronePos3D.X, CarPos3D.Y - DronePos3D.Y).GetSafeNormal();
+	const float      HalfFovCos  = FMath::Cos(FMath::DegreesToRadians(DetectionFovDeg * 0.5f));
+
+	// Only apply the angular pre-filter when the drone has a meaningful horizontal
+	// heading component; otherwise skip it and let the 3D check decide.
+	const bool bApplyAngle = !DroneFwd2D.IsNearlyZero(0.1f);
+	if (bApplyAngle && FVector2D::DotProduct(DroneFwd2D, DirToCar2D) < HalfFovCos)
+	{
+		bDroneInCaptureRange = false;
+		bDroneHasLOS         = false;
+		bDroneInFOV          = false;
+		Commit();
+		return;
+	}
+
+	// 3D capture range (full distance including altitude).
+	const float Dist3D = FVector::Distance(CarPos3D, DronePos3D);
+	bDroneInCaptureRange = (Dist3D <= CaptureRadius);
+
+	// Line-of-sight — three traces at different car heights, stops at first clear.
+	FCollisionQueryParams LOSParams(NAME_None, false, this);
+	LOSParams.AddIgnoredActor(CachedDrone);
+	const FVector DroneTrace = DronePos3D + FVector(0.0f, 0.0f, 100.0f);
+	bDroneHasLOS = false;
+	static constexpr float CarOffsets[] = { 300.0f, 150.0f, 50.0f };
+	for (float ZOff : CarOffsets)
+	{
+		FHitResult LOSHit;
+		if (!GetWorld()->LineTraceSingleByChannel(
+			LOSHit, CarPos3D + FVector(0.0f, 0.0f, ZOff), DroneTrace,
+			ECC_WorldStatic, LOSParams))
+		{
+			bDroneHasLOS = true;
+			break;
+		}
 	}
 
 	bDroneInFOV = ComputeDroneInFOV();
-
-	if (!bDroneInCaptureRange)
-		CaptureTimer = 0.0f;
-
-	const bool bShowBeacon = !bDroneHasLOS;
-	if (BeaconPole->IsVisible() != bShowBeacon)
-	{
-		BeaconPole->SetVisibility(bShowBeacon);
-		BeaconBeamLight->SetVisibility(bShowBeacon);
-	}
+	Commit();
 }
 
 bool ATargetPawn::ComputeDroneInFOV() const
 {
 	if (!CachedDrone || !bDroneHasLOS) return false;
 
-	APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	if (!PC || PC->GetPawn() != CachedDrone) return false;
+	const FVector CarPos   = GetActorLocation();
+	const FVector DronePos = CachedDrone->GetActorLocation();
 
-	const float Dist = FVector::Distance(GetActorLocation(), CachedDrone->GetActorLocation());
-	if (Dist > DetectionRange) return false;
+	if (FVector::Distance(CarPos, DronePos) > DetectionRange) return false;
 
-	const FVector CamDir   = PC->GetControlRotation().Vector();
-	const FVector ToTarget = (GetActorLocation() - CachedDrone->GetActorLocation()).GetSafeNormal();
-
-	return FVector::DotProduct(CamDir, ToTarget) >= 0.707f;
+	const FVector DroneFwd   = CachedDrone->GetActorForwardVector();
+	const FVector DroneToCar = (CarPos - DronePos).GetSafeNormal();
+	const float   HalfFovCos = FMath::Cos(FMath::DegreesToRadians(DetectionFovDeg * 0.5f));
+	return FVector::DotProduct(DroneFwd, DroneToCar) >= HalfFovCos;
 }
 
 void ATargetPawn::PlaceDroneNearCar(const FVector& CarPos, const FVector& CarForward)
@@ -583,13 +641,30 @@ void ATargetPawn::PlaceDroneNearCar(const FVector& CarPos, const FVector& CarFor
 	IgnoreActors.AddIgnoredActor(this);
 	IgnoreActors.AddIgnoredActor(CachedDrone);
 
-	static constexpr float Heights[]   = {  500.0f, 1000.0f, 2000.0f, 3000.0f };
-	static constexpr float Distances[] = { 2000.0f, 1500.0f, 1000.0f,  500.0f, 0.0f };
+	static constexpr float SphereR      = 600.0f;
+	static constexpr float SkyCheckDist = 2000.0f;
 
-	FVector Behind(CarPos.X, CarPos.Y, CarPos.Z + 3000.0f);
+	auto IsClear = [&](const FVector& P) -> bool
+	{
+		if (GetWorld()->OverlapAnyTestByChannel(
+			P, FQuat::Identity, ECC_WorldStatic,
+			FCollisionShape::MakeSphere(SphereR), IgnoreActors))
+			return false;
+
+		FHitResult UpHit;
+		return !GetWorld()->LineTraceSingleByChannel(
+			UpHit, P, P + FVector(0.f, 0.f, SkyCheckDist),
+			ECC_WorldStatic, IgnoreActors);
+	};
+
+	static constexpr float Heights[]   = { 1500.f, 3000.f, 5000.f, 8000.f, 12000.f };
+	static constexpr float Distances[] = { 3000.f, 2000.f, 1000.f, 0.f };
+
+	FVector Best(CarPos.X, CarPos.Y, CarPos.Z + 15000.f);
+	bool bPlaced = false;
+
 	for (float Height : Heights)
 	{
-		bool bFound = false;
 		for (float Dist : Distances)
 		{
 			const FVector Candidate(
@@ -597,27 +672,25 @@ void ATargetPawn::PlaceDroneNearCar(const FVector& CarPos, const FVector& CarFor
 				CarPos.Y - CarForward.Y * Dist,
 				CarPos.Z + Height);
 
-			if (!GetWorld()->OverlapAnyTestByChannel(
-				Candidate, FQuat::Identity, ECC_WorldStatic,
-				FCollisionShape::MakeSphere(400.0f), IgnoreActors))
+			if (IsClear(Candidate))
 			{
-				Behind = Candidate;
-				bFound = true;
+				Best    = Candidate;
+				bPlaced = true;
 				break;
 			}
 		}
-		if (bFound) break;
+		if (bPlaced) break;
 	}
 
-	CachedDrone->SetActorLocation(Behind, false, nullptr, ETeleportType::TeleportPhysics);
+	CachedDrone->SetActorLocation(Best, false, nullptr, ETeleportType::TeleportPhysics);
 
 	const FRotator FaceRotator(0.0f, CarForward.Rotation().Yaw, 0.0f);
 	CachedDrone->SetActorRotation(FaceRotator, ETeleportType::TeleportPhysics);
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		PC->SetControlRotation(FaceRotator);
 
-	UE_LOG(LogTemp, Log, TEXT("TargetPawn: drone placed at (%.0f, %.0f, %.0f)"),
-		Behind.X, Behind.Y, Behind.Z);
+	UE_LOG(LogTemp, Log, TEXT("TargetPawn: drone placed at (%.0f, %.0f, %.0f)%s"),
+		Best.X, Best.Y, Best.Z, bPlaced ? TEXT("") : TEXT(" [fallback — all candidates blocked]"));
 }
 
 void ATargetPawn::WriteGraphDataJS()

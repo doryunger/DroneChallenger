@@ -98,7 +98,8 @@ const MAX_RAD_CM   = 200000;  // max effective radius (cm)
 // droneX/Y/Z and targetX/Y/Z are ABSOLUTE UE5 world coordinates (cm)
 // UE5 X = North axis, UE5 Y = East axis (for this Cesium Munich setup)
 let S = { droneX:0, droneY:0, droneZ:0, yaw:0, altM:50,
-          targetX:0, targetY:0, targetZ:0, inFov:false };
+          targetX:0, targetY:0, targetZ:0, inFov:false,
+          fovDeg: FOV_DEG, detRangeCm: DET_RANG_CM };
 let animT = 0;
 let wsQueue = [];
 let smoothAltM = -1;
@@ -115,6 +116,8 @@ function frame(now) {
         S.yaw     = d.yaw;  S.altM = d.altM;
         S.targetX = d.tx;  S.targetY = d.ty;  S.targetZ = d.tz;
         S.inFov   = d.inFov;
+        if (d.fovDeg     !== undefined) S.fovDeg     = d.fovDeg;
+        if (d.detRangeCm !== undefined) S.detRangeCm = d.detRangeCm;
         if (!hasData) { hasData = true; cv.style.visibility = 'visible'; }
     }
     const dt = prevFrameMs > 0 ? Math.min((now - prevFrameMs) / 1000, 0.1) : 0;
@@ -161,8 +164,8 @@ function drawMinimap(ctx, W, H) {
         return ts(rotN, rotE);
     }
 
-    const frustLen = Math.min(DET_RANG_CM, clipR * 0.95);
-    const halfFov  = deg(FOV_DEG / 2);
+    const frustLen = Math.min(S.detRangeCm, clipR * 0.95);
+    const halfFov  = deg(S.fovDeg / 2);
     const ARC_N    = 22;
 
     function fovPt(a) { return ts(Math.cos(a)*frustLen, Math.sin(a)*frustLen); }
@@ -310,7 +313,7 @@ function drawMinimap(ctx, W, H) {
         ctx.beginPath();
         ctx.moveTo(cx + dx*touter,      cy + dy*touter);
         ctx.lineTo(cx + dx*(touter-tL), cy + dy*(touter-tL));
-        ctx.strokeStyle = maj ? 'rgba(140,148,170,0.65)' : 'rgba(140,148,170,0.30)';
+        ctx.strokeStyle = maj ? 'rgba(200,208,230,0.90)' : 'rgba(170,178,200,0.65)';
         ctx.lineWidth = 1; ctx.stroke();
     }
 

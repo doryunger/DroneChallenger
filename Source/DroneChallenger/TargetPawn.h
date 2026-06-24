@@ -41,7 +41,10 @@ public:
 	float EvadeSpeed = 1000.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Target|Detection")
-	float DetectionRange = 50000.0f;
+	float DetectionRange = 20000.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Target|Detection")
+	float DetectionFovDeg = 90.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Target|Detection")
 	float CaptureRadius = 100.0f;
