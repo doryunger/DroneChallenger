@@ -13,8 +13,19 @@ void FDroneFlightController::Update(
 	const float TiltComp    = 1.0f / TiltCos;
 	const float ThrottleCmd = FMath::Clamp((HoverThrottle + Input.Throttle * ThrottleRange) * TiltComp, 0.0f, 1.0f);
 
-	const float DesiredPitchRate = Input.Pitch * MaxPitchRollRate;
-	const float DesiredRollRate  = Input.Roll  * MaxPitchRollRate;
+	const float TiltAngleDeg  = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(ActorUp.Z, 0.f, 1.f)));
+	const float LimitScale    = 1.f - FMath::Clamp((TiltAngleDeg - MaxTiltAngleDeg) / 15.f, 0.f, 1.f);
+
+	const float TiltRollRad  = FMath::Atan2( ActorUp.Y, ActorUp.Z);
+	const float TiltPitchRad = FMath::Atan2(-ActorUp.X, ActorUp.Z);
+
+	const bool bRollCorrects  = (FMath::Abs(BodyAngVelDeg.X) > 2.f && Input.Roll  * BodyAngVelDeg.X < 0.f)
+	                          || (FMath::Abs(TiltRollRad)  > 0.035f && Input.Roll  * TiltRollRad  < 0.f);
+	const bool bPitchCorrects = (FMath::Abs(BodyAngVelDeg.Y) > 2.f && Input.Pitch * BodyAngVelDeg.Y < 0.f)
+	                          || (FMath::Abs(TiltPitchRad) > 0.035f && Input.Pitch * TiltPitchRad < 0.f);
+
+	const float DesiredPitchRate = Input.Pitch * MaxPitchRollRate * (bPitchCorrects ? 1.f : LimitScale);
+	const float DesiredRollRate  = Input.Roll  * MaxPitchRollRate * (bRollCorrects  ? 1.f : LimitScale);
 	const float DesiredYawRate   = Input.Yaw   * MaxYawRate;
 
 	const float PitchOut = PitchRatePID.Update(DesiredPitchRate - BodyAngVelDeg.Y, BodyAngVelDeg.Y, DeltaTime);

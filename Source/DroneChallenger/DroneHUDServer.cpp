@@ -225,11 +225,13 @@ FString FDroneHUDServer::MakeStateJSON()
 	{ FScopeLock Lk(&StateLock); S = State; }
 	return FString::Printf(
 		TEXT("{\"dx\":%.1f,\"dy\":%.1f,\"dz\":%.1f,\"yaw\":%.4f,"
-		     "\"altM\":%.2f,\"tx\":%.1f,\"ty\":%.1f,\"tz\":%.1f,\"inFov\":%s}"),
+		     "\"altM\":%.2f,\"tx\":%.1f,\"ty\":%.1f,\"tz\":%.1f,\"inFov\":%s,"
+		     "\"fovDeg\":%.1f,\"detRangeCm\":%.0f}"),
 		S.DroneX, S.DroneY, S.DroneZ,
 		S.DroneYaw, S.AltM,
 		S.TargetX, S.TargetY, S.TargetZ,
-		S.bTargetInFOV ? TEXT("true") : TEXT("false"));
+		S.bTargetInFOV ? TEXT("true") : TEXT("false"),
+		S.FovDeg, S.DetRangeCm);
 }
 
 bool FDroneHUDServer::HandleWSUpgrade(FSocket* Client, const TMap<FString, FString>& Headers)

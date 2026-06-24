@@ -129,7 +129,7 @@ void UDroneMainMenuWidget::DrawTitleScreen(
 
     const float TitleX1 = (W - TotalW) * 0.5f;
     const float TitleX2 = TitleX1 + W1 + GapW;
-    const float TitleY  = H * 0.18f;
+    const float TitleY  = H * 0.08f;
 
     DrawPixelWord(Geom, Out, Layer, Word1, TitleX1, TitleY, PixelW, FadeAlpha);
     DrawPixelWord(Geom, Out, Layer, Word2, TitleX2, TitleY, PixelW, FadeAlpha);
@@ -148,18 +148,18 @@ void UDroneMainMenuWidget::DrawTitleScreen(
         const float PressPixelW = FMath::Max(2.f, FMath::Floor(PixelW * 0.43f));
         const float PressW      = PixelWordWidth(PressText, PressPixelW);
         const float PressX      = (W - PressW) * 0.5f;
-        const float PressY      = H * 0.46f;
+        const float PressY      = H * 0.34f;
         DrawPixelWord(Geom, Out, Layer, PressText, PressX, PressY, PressPixelW, FlashAlpha,
-            FLinearColor(1.0f, 0.84f, 0.0f, 1.0f));
+            FLinearColor(0.92f, 0.62f, 0.03f, 1.0f));
     }
 
     if (bDroneBrushReady)
     {
-        const float DroneW = W * 0.28f;
+        const float DroneW = W * 0.20f;
         const float DroneH = DroneW;
         FSlateDrawElement::MakeBox(Out, Layer,
             Geom.ToPaintGeometry(FVector2f(DroneW, DroneH),
-                FSlateLayoutTransform(FVector2f(W * 0.08f, H * 0.38f))),
+                FSlateLayoutTransform(FVector2f(W * 0.20f, H * 0.40f))),
             &DroneBrush, ESlateDrawEffect::None,
             FLinearColor(1.f, 1.f, 1.f, FadeAlpha));
         ++Layer;
@@ -167,11 +167,11 @@ void UDroneMainMenuWidget::DrawTitleScreen(
 
     if (bCarBrushReady)
     {
-        const float CarW = W * 0.48f;
+        const float CarW = W * 0.50f;
         const float CarH = CarW * (72.f / 128.f);
         FSlateDrawElement::MakeBox(Out, Layer,
             Geom.ToPaintGeometry(FVector2f(CarW, CarH),
-                FSlateLayoutTransform(FVector2f(W * 0.54f, H * 0.42f))),
+                FSlateLayoutTransform(FVector2f(W * 0.46f, H * 0.40f))),
             &CarBrush, ESlateDrawEffect::None,
             FLinearColor(1.f, 1.f, 1.f, FadeAlpha));
         ++Layer;
@@ -252,18 +252,17 @@ void UDroneMainMenuWidget::DrawDialogScreen(
 
     struct FInstrLine { const TCHAR* Text; bool bHeader; };
     static const FInstrLine Lines[] = {
-        { TEXT("FPV drone sim above Munich, Germany."),       false },
-        { TEXT(""),                                           false },
-        { TEXT("TRACKING MODE"),                             true  },
-        { TEXT("Keep the target vehicle in camera view."),   false },
-        { TEXT("Score = longest continuous lock-on time."),  false },
-        { TEXT(""),                                           false },
-        { TEXT("HUNTING MODE"),                              true  },
-        { TEXT("Close within 1 m of the vehicle and hold."), false },
-        { TEXT("Capture only counts after 30 s warmup."),    false },
-        { TEXT(""),                                           false },
-        { TEXT("Throttle / Pitch / Roll / Yaw to fly."),     false },
-        { TEXT("Assigned key toggles FPV / chase camera."),  false },
+        { TEXT(""),                                            false },
+        { TEXT("THE MISSION"),                               true  },
+        { TEXT("Keep the target vehicle in camera view."),     false },
+        { TEXT("Score = longest continuous lock-on time."),    false },
+        { TEXT("Stay within 1 m of the car to capture it."),   false },
+        { TEXT(""),                                            false },
+        { TEXT("KEYS"),                                       true  },
+        { TEXT("W / S  - throttle up / down"),                 false },
+        { TEXT("D / A  - roll right / left"),                  false },
+        { TEXT("E / Q  - yaw right / left"),                   false },
+        { TEXT("C      - change camera"),                      false },
     };
 
     Out.PushClip(FSlateClippingZone(Geom.ToPaintGeometry(
@@ -386,8 +385,11 @@ void UDroneMainMenuWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
         if (FadeAlpha <= 0.f)
         {
             FadeAlpha = 0.f;
-            OnContinue.ExecuteIfBound();
-            RemoveFromParent();
+            if (!bContinueFired)
+            {
+                bContinueFired = true;
+                OnContinue.ExecuteIfBound();
+            }
         }
     }
 }
@@ -406,12 +408,13 @@ int32 UDroneMainMenuWidget::NativePaint(
         constexpr int32 NumBands = 28;
         const FLinearColor BgTop(0.01f, 0.01f, 0.18f);
         const FLinearColor BgBot(0.03f, 0.50f, 0.62f);
-        const float BandH = Size.Y / (float)NumBands;
+        const float BandH  = Size.Y / (float)NumBands;
+        const float BgAlpha = bDismissing ? 1.f : FadeAlpha;
         for (int32 i = 0; i < NumBands; ++i)
         {
             const float T = (float)i / (float)(NumBands - 1);
             FLinearColor Col = FMath::Lerp(BgTop, BgBot, T);
-            Col.A = FadeAlpha;
+            Col.A = BgAlpha;
             SlateBox(AllottedGeometry, OutDrawElements, LayerId,
                 0.f, i * BandH, Size.X, FMath::Min(BandH + 1.f, Size.Y - i * BandH), Col);
         }
@@ -422,6 +425,14 @@ int32 UDroneMainMenuWidget::NativePaint(
 
     if (State == EMenuState::Dialog)
         DrawDialogScreen(AllottedGeometry, OutDrawElements, LayerId);
+
+    if (bDismissing)
+    {
+        SlateBox(AllottedGeometry, OutDrawElements, LayerId,
+            0.f, 0.f, Size.X, Size.Y,
+            FLinearColor(0.f, 0.f, 0.f, 1.f - FadeAlpha));
+        ++LayerId;
+    }
 
     return LayerId;
 }

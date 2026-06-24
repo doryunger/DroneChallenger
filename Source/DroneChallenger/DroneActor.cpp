@@ -13,6 +13,7 @@
 #include "InputActionValue.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Engine/SkeletalMesh.h"
+#include "DroneGameMode.h"
 
 ADroneActor::ADroneActor()
 {
@@ -41,11 +42,13 @@ ADroneActor::ADroneActor()
 	SpringArm->SocketOffset    = FVector(0.0f, 0.0f, 0.0f);
 	SpringArm->TargetOffset    = FVector(0.0f, 0.0f, 0.0f);
 	SpringArm->SetRelativeRotation(FRotator(-15.0f, 0.0f, 0.0f));
-	SpringArm->bInheritPitch    = false;
-	SpringArm->bInheritRoll     = false;
-	SpringArm->bInheritYaw      = true;
-	SpringArm->bDoCollisionTest = true;
-	SpringArm->bEnableCameraLag = false;
+	SpringArm->bInheritPitch            = true;
+	SpringArm->bInheritRoll             = true;
+	SpringArm->bInheritYaw              = true;
+	SpringArm->bDoCollisionTest         = true;
+	SpringArm->bEnableCameraLag         = false;
+	SpringArm->bEnableCameraRotationLag = true;
+	SpringArm->CameraRotationLagSpeed   = 10.0f;
 
 	ChaseCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ChaseCamera"));
 	ChaseCamera->SetupAttachment(SpringArm, USpringArmComponent::SocketName);
@@ -122,6 +125,7 @@ void ADroneActor::BeginPlay()
 	PhysicsBody->SetMassOverrideInKg(NAME_None, Mass);
 	PhysicsBody->SetLinearDamping(LinearDamping);
 	PhysicsBody->SetAngularDamping(AngularDamping);
+	PhysicsBody->SetUseCCD(true);
 
 	InitHoverThrottle();
 
@@ -159,23 +163,31 @@ void ADroneActor::BeginPlay()
 
 	if (StartupSound)
 		UGameplayStatics::PlaySoundAtLocation(this, StartupSound, GetActorLocation());
+
+	PhysicsBody->SetNotifyRigidBodyCollision(true);
+	PhysicsBody->OnComponentHit.AddDynamic(this, &ADroneActor::OnPhysicsHit);
 }
 
 void ADroneActor::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
 	RegisterInputMappingContext(NewController);
+
+	if (APlayerController* PC = Cast<APlayerController>(NewController))
+	{
+		FInputModeGameOnly InputMode;
+		PC->SetInputMode(InputMode);
+		PC->bShowMouseCursor = false;
+	}
 }
 
 void ADroneActor::RegisterInputMappingContext(AController* InController)
 {
 	if (!InputMappingContext)
 		return;
-
 	APlayerController* PC = Cast<APlayerController>(InController);
 	if (!PC)
 		return;
-
 	UEnhancedInputLocalPlayerSubsystem* Subsystem =
 		ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer());
 	if (Subsystem)
@@ -244,15 +256,12 @@ void ADroneActor::OnThrottleCompleted(const FInputActionValue&)
 
 void ADroneActor::OnPitchRoll(const FInputActionValue& Value)
 {
-	const FVector2D Axis = Value.Get<FVector2D>();
-	ControlInput.Pitch   = Axis.X;
-	ControlInput.Roll    = Axis.Y;
+	ControlInput.Pitch = Value.Get<FVector2D>().X;
 }
 
 void ADroneActor::OnPitchRollCompleted(const FInputActionValue&)
 {
 	ControlInput.Pitch = 0.0f;
-	ControlInput.Roll  = 0.0f;
 }
 
 void ADroneActor::OnYaw(const FInputActionValue& Value)
@@ -278,6 +287,22 @@ void ADroneActor::Tick(float DeltaTime)
 
 	if (!PhysicsBody || !PhysicsBody->IsSimulatingPhysics())
 		return;
+
+	if (bGameOver)
+		return;
+
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		ControlInput.Roll = (PC->IsInputKeyDown(EKeys::D) ? 1.f : 0.f)
+		                  - (PC->IsInputKeyDown(EKeys::A) ? 1.f : 0.f);
+	}
+
+	const float AngVelMag = PhysicsBody->GetPhysicsAngularVelocityInDegrees().Size();
+	if (AngVelMag > 450.f)
+	{
+		NotifyCrash();
+		return;
+	}
 
 	const FVector WorldAngVelDeg = PhysicsBody->GetPhysicsAngularVelocityInDegrees();
 	const FVector BodyAngVelDeg  = GetActorRotation().UnrotateVector(WorldAngVelDeg);
@@ -354,4 +379,24 @@ void ADroneActor::UpdateMotorAudio()
 
 	const float PitchMult = FMath::Lerp(0.6f, 1.8f, AvgThrottle);
 	MotorAudio->SetPitchMultiplier(PitchMult);
+}
+
+void ADroneActor::OnPhysicsHit(UPrimitiveComponent*, AActor*, UPrimitiveComponent*, FVector,
+	const FHitResult& Hit)
+{
+	if (bGameOver) return;
+	const float ImpactSpeed = FMath::Abs(
+		FVector::DotProduct(PhysicsBody->GetPhysicsLinearVelocity(), Hit.ImpactNormal));
+	const float CrashThreshold = (Hit.ImpactNormal.Z > 0.5f) ? 150.f : 400.f;
+	if (ImpactSpeed > CrashThreshold)
+		NotifyCrash();
+}
+
+void ADroneActor::NotifyCrash()
+{
+	if (bGameOver) return;
+	bGameOver = true;
+	PhysicsBody->SetSimulatePhysics(false);
+	if (ADroneGameMode* GM = GetWorld()->GetAuthGameMode<ADroneGameMode>())
+		GM->NotifyCrash();
 }

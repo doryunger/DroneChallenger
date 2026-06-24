@@ -22,6 +22,7 @@ public:
 	float MaxYawRate       = 120.0f;
 	float HoverThrottle    = 0.0f;
 	float ThrottleRange    = 0.5f;
+	float MaxTiltAngleDeg  = 55.0f;
 
 	void Update(const FDroneControlInput& Input,
 	            const FVector& ActorUp,

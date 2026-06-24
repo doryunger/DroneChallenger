@@ -2,7 +2,6 @@
 #include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
 #include "Framework/Application/SlateApplication.h"
-#include "Fonts/FontMeasure.h"
 #include "Misc/FileHelper.h"
 #include "IImageWrapperModule.h"
 #include "IImageWrapper.h"
@@ -11,6 +10,49 @@
 
 static constexpr float CrossDuration = 1.5f;
 static constexpr float WaitDuration  = 1.5f;
+
+struct FLGlyph { uint8 Rows[7]; };
+
+static const FLGlyph LW_A   = {{ 14, 17, 17, 31, 17, 17, 17 }};
+static const FLGlyph LW_D   = {{ 30, 17, 17, 17, 17, 17, 30 }};
+static const FLGlyph LW_G   = {{ 14, 17, 16, 19, 17, 17, 14 }};
+static const FLGlyph LW_I   = {{ 31,  4,  4,  4,  4,  4, 31 }};
+static const FLGlyph LW_L   = {{ 16, 16, 16, 16, 16, 16, 31 }};
+static const FLGlyph LW_N   = {{ 17, 25, 21, 19, 17, 17, 17 }};
+static const FLGlyph LW_O   = {{ 14, 17, 17, 17, 17, 17, 14 }};
+static const FLGlyph LW_Dot = {{  0,  0,  0,  0,  0,  6,  6 }};
+
+static const FLGlyph* GetLoadingGlyph(TCHAR C)
+{
+    switch (C)
+    {
+    case 'A': return &LW_A;
+    case 'D': return &LW_D;
+    case 'G': return &LW_G;
+    case 'I': return &LW_I;
+    case 'L': return &LW_L;
+    case 'N': return &LW_N;
+    case 'O': return &LW_O;
+    case '.': return &LW_Dot;
+    default:  return nullptr;
+    }
+}
+
+static float LW_WordWidth(const FString& Word, float PW)
+{
+    if (Word.IsEmpty()) return 0.f;
+    return (float)(Word.Len() * 5 + (Word.Len() - 1)) * PW;
+}
+
+static const FLinearColor LW_Gradient[7] = {
+    FLinearColor(1.00f, 0.98f, 0.72f),
+    FLinearColor(1.00f, 0.90f, 0.35f),
+    FLinearColor(0.98f, 0.76f, 0.08f),
+    FLinearColor(0.90f, 0.60f, 0.02f),
+    FLinearColor(0.76f, 0.44f, 0.01f),
+    FLinearColor(0.58f, 0.28f, 0.00f),
+    FLinearColor(0.36f, 0.12f, 0.00f),
+};
 
 UTexture2D* UDroneLoadingWidget::LoadPNGTexture(const FString& Path)
 {
@@ -124,76 +166,55 @@ int32 UDroneLoadingWidget::NativePaint(
     const FVector2D Size = AllottedGeometry.GetLocalSize();
     const float W = Size.X;
     const float H = Size.Y;
-    const float S = FMath::Min(W, H);
+    const FSlateBrush* White = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
 
-    FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
-        AllottedGeometry.ToPaintGeometry(
-            FVector2f(W, H), FSlateLayoutTransform()),
-        FCoreStyle::Get().GetBrush(TEXT("WhiteBrush")),
-        ESlateDrawEffect::None,
-        FLinearColor(0.f, 0.f, 0.f, FadeAlpha));
-    ++LayerId;
-
-    const int32 FontSz = FMath::Clamp(FMath::RoundToInt(S * 0.114f), 42, 144);
-    const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Bold", FontSz);
-
-    const auto& MeasureService = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
-    auto MeasureChar = [&](TCHAR C) -> float
+    auto SlateBox = [&](float X, float Y, float BW, float BH, const FLinearColor& C)
     {
-        return (float)MeasureService->Measure(FString::Chr(C), Font).X;
+        FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
+            AllottedGeometry.ToPaintGeometry(FVector2f(BW, BH), FSlateLayoutTransform(FVector2f(X, Y))),
+            White, ESlateDrawEffect::None, C);
     };
 
-    const FString WaveText = TEXT("LOADING...");
-    const float Amplitude  = FontSz * 0.22f;
-    const float WaveSpeed  = 1.8f;
-    const float PhaseStep  = 2.0f * UE_PI / (float)WaveText.Len();
-    const float CharH      = (float)MeasureService->Measure(WaveText, Font).Y;
+    SlateBox(0.f, 0.f, W, H, FLinearColor(0.f, 0.f, 0.f, FadeAlpha));
+    ++LayerId;
 
-    float TotalW = 0.f;
-    for (TCHAR C : WaveText) TotalW += MeasureChar(C);
+    const FString WaveText  = TEXT("LOADING...");
+    const float   PixelW    = FMath::Max(2.f, FMath::Floor(W * 0.55f / (WaveText.Len() * 6.f)));
+    const float   TotalW    = LW_WordWidth(WaveText, PixelW);
+    const float   CharH     = 7.f * PixelW;
+    const float   BaseX     = (W - TotalW) * 0.5f;
+    const float   BaseY     = (H - CharH)  * 0.5f;
+    const float   Amplitude = PixelW * 1.5f;
+    const float   WaveSpeed = 1.8f;
+    const float   PhaseStep = 2.0f * UE_PI / (float)WaveText.Len();
 
-    const float BaseX = (W - TotalW) * 0.5f;
-    const float BaseY = (H - CharH)  * 0.5f;
-
-    const FLinearColor kYellow(1.00f, 0.96f, 0.18f, FadeAlpha);
-    const FLinearColor kGold  (0.78f, 0.38f, 0.00f, FadeAlpha);
-    const FLinearColor kDepth3(0.15f, 0.08f, 0.00f, FadeAlpha);
-    const FLinearColor kDepth2(0.30f, 0.16f, 0.00f, FadeAlpha);
-    const FLinearColor kDepth1(0.50f, 0.28f, 0.01f, FadeAlpha);
-    const FLinearColor kHilit (1.00f, 0.95f, 0.50f, FadeAlpha * 0.12f);
+    const float ShimmerCycle = (float)WaveText.Len() + 6.f;
+    const float ShimmerPos   = FMath::Fmod(ElapsedTime * 3.f, ShimmerCycle) - 3.f;
 
     float CurX = BaseX;
     for (int32 i = 0; i < WaveText.Len(); ++i)
     {
-        const float CW    = MeasureChar(WaveText[i]);
-        const float CharY = BaseY + FMath::Sin(ElapsedTime * WaveSpeed + i * PhaseStep) * Amplitude;
-        const FString Glyph = FString::Chr(WaveText[i]);
+        const float WaveY   = BaseY + FMath::Sin(ElapsedTime * WaveSpeed + i * PhaseStep) * Amplitude;
+        const float T       = FMath::Clamp(FMath::Abs((float)i - ShimmerPos) / 2.5f, 0.f, 1.f);
+        const float Bright  = 1.f + 0.35f * FMath::Max(0.f, 1.f - T * 1.5f);
 
-        const float ShimmerCycle = (float)WaveText.Len() + 6.0f;
-        const float ShimmerPos   = FMath::Fmod(ElapsedTime * 3.0f, ShimmerCycle) - 3.0f;
-        const float T            = FMath::Clamp(FMath::Abs((float)i - ShimmerPos) / 2.5f, 0.f, 1.f);
-        const FLinearColor FaceColor(
-            FMath::Lerp(kYellow.R, kGold.R, T),
-            FMath::Lerp(kYellow.G, kGold.G, T),
-            FMath::Lerp(kYellow.B, kGold.B, T),
-            FadeAlpha);
-
-        auto DrawGlyph = [&](float OX, float OY, const FLinearColor& Col)
+        if (const FLGlyph* G = GetLoadingGlyph(WaveText[i]))
         {
-            FSlateDrawElement::MakeText(OutDrawElements, LayerId,
-                AllottedGeometry.ToPaintGeometry(
-                    FVector2f(CW + 6.f, CharH + 6.f),
-                    FSlateLayoutTransform(FVector2f(CurX + OX, CharY + OY))),
-                FText::FromString(Glyph), Font, ESlateDrawEffect::None, Col);
-        };
-
-        DrawGlyph( 3.f,  3.f, kDepth3);
-        DrawGlyph( 2.f,  2.f, kDepth2);
-        DrawGlyph( 1.f,  1.f, kDepth1);
-        DrawGlyph( 0.f,  0.f, FaceColor);
-        DrawGlyph(-0.5f,-1.f, kHilit);
-
-        CurX += CW;
+            for (int32 row = 0; row < 7; ++row)
+            {
+                FLinearColor C(
+                    LW_Gradient[row].R * Bright,
+                    LW_Gradient[row].G * Bright,
+                    LW_Gradient[row].B * Bright,
+                    FadeAlpha);
+                for (int32 col = 0; col < 5; ++col)
+                {
+                    if (G->Rows[row] & (1u << (4 - col)))
+                        SlateBox(CurX + col * PixelW, WaveY + row * PixelW, PixelW, PixelW, C);
+                }
+            }
+        }
+        CurX += 6.f * PixelW;
     }
     ++LayerId;
 
@@ -206,9 +227,7 @@ int32 UDroneLoadingWidget::NativePaint(
         if (ActiveBrush.IsValid())
         {
             const float Progress = FMath::Clamp(PhaseTimer / CrossDuration, 0.f, 1.f);
-
-            // Scale: 75% at edges, 250% at center
-            const float Scale = 0.75f + 1.75f * FMath::Sin(Progress * UE_PI);
+            const float Scale    = 0.75f + 1.75f * FMath::Sin(Progress * UE_PI);
 
             const FVector2D NatSz = ActiveBrush->ImageSize;
             const float AspR  = NatSz.Y > 0.0 ? NatSz.X / NatSz.Y : 1.0f;
@@ -217,14 +236,12 @@ int32 UDroneLoadingWidget::NativePaint(
             const float DrawH = BaseH * Scale;
             const float DrawW = BaseW * Scale;
 
-            // X: 15% buffer beyond each end of the text
             const float Buffer  = TotalW * 0.50f;
             const float StartCX = BaseX - Buffer - BaseW * 0.5f;
             const float EndCX   = BaseX + TotalW + Buffer + BaseW * 0.5f;
             const float CenterX = StartCX + Progress * (EndCX - StartCX);
             const float DrawX   = CenterX - DrawW * 0.5f;
 
-            // Y: vertically centered on the text — no vertical movement
             const float TextCenterY = BaseY + CharH * 0.5f;
             const float DrawY       = TextCenterY - DrawH * 0.5f;
 
