@@ -16,10 +16,17 @@ bool UMiniMapWidget::Initialize()
                 Prop->SetPropertyValue_InContainer(Browser, true);
             }
             WidgetTree->RootWidget = Browser;
+            Browser->OnConsoleMessage.AddDynamic(this, &UMiniMapWidget::HandleConsoleMessage);
         }
     }
     UE_LOG(LogTemp, Log, TEXT("MiniMapWidget: Initialize — Browser=%s"), Browser ? TEXT("OK") : TEXT("NULL"));
     return bResult;
+}
+
+void UMiniMapWidget::HandleConsoleMessage(const FString& Message, const FString& Source, int32 Line)
+{
+    if (Message.Contains(TEXT("MINIMAP_READY")))
+        OnReady.ExecuteIfBound();
 }
 
 void UMiniMapWidget::NativeConstruct()

@@ -175,9 +175,10 @@ void ADroneActor::PossessedBy(AController* NewController)
 
 	if (APlayerController* PC = Cast<APlayerController>(NewController))
 	{
-		FInputModeGameOnly InputMode;
+		FInputModeGameAndUI InputMode;
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 		PC->SetInputMode(InputMode);
-		PC->bShowMouseCursor = false;
+		PC->bShowMouseCursor = true;
 	}
 }
 

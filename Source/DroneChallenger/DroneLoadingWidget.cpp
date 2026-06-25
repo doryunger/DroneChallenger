@@ -85,7 +85,7 @@ void UDroneLoadingWidget::NativeConstruct()
 {
     Super::NativeConstruct();
 
-    const FString Base = FPaths::ProjectDir() / TEXT("HUD/");
+    const FString Base = FPaths::ProjectContentDir() / TEXT("HUD/");
 
     CarTex   = LoadPNGTexture(Base + TEXT("silhouette_car.png"));
     DroneTex = LoadPNGTexture(Base + TEXT("silhouette_drone.png"));
