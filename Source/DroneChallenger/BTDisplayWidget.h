@@ -28,7 +28,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "BT")
 	void TogglePanel();
 
+	UFUNCTION(BlueprintCallable, Category = "BT")
+	void NotifyContentReady();
+
 protected:
+	UFUNCTION() void HandleConsoleMessage(const FString& Message, const FString& Source, int32 Line);
 	virtual void NativeConstruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,
@@ -36,6 +40,8 @@ protected:
 		int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 
 private:
-	float StripePhase = 0.f;
+	float StripePhase    = 0.f;
+	float LoadingElapsed = 0.f;
+	bool  bContentReady  = false;
 	mutable UButton* CachedBtn = nullptr;
 };

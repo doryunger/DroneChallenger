@@ -11,6 +11,6 @@ public class DroneChallenger : ModuleRules
 			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "CesiumRuntime", "UMG", "WebBrowser", "WebBrowserWidget", "AIModule"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore", "ArboristLib", "Sockets", "Networking", "ImageWrapper" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore", "ArboristLib", "Sockets", "Networking", "ImageWrapper", "MoviePlayer" });
 	}
 }

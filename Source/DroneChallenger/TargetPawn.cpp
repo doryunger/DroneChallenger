@@ -153,7 +153,7 @@ void ATargetPawn::BeginPlay()
 			WriteGraphDataJS();
 
 			const FString UiDir = FPaths::ConvertRelativePathToFull(
-				FPaths::ProjectDir() / TEXT("HUD"));
+				FPaths::ProjectContentDir() / TEXT("HUD"));
 			HUDServer = new FDroneHUDServer(UiDir);
 			if (HUDServer->Start(8081))
 			{
@@ -722,7 +722,7 @@ void ATargetPawn::WriteGraphDataJS()
 	Out += TEXT("];");
 
 	const FString OutPath = FPaths::ConvertRelativePathToFull(
-		FPaths::ProjectDir() / TEXT("HUD/minimap/munich_graph.js"));
+		FPaths::ProjectContentDir() / TEXT("HUD/minimap/munich_graph.js"));
 	if (FFileHelper::SaveStringToFile(Out, *OutPath))
 	{
 		UE_LOG(LogTemp, Log, TEXT("TargetPawn: wrote munich_graph.js (%d nodes) to %s"),

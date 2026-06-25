@@ -7,11 +7,12 @@
 #include "Blueprint/WidgetTree.h"
 #include "Styling/CoreStyle.h"
 #include "Rendering/DrawElements.h"
+#include "WebBrowser.h"
 
 FString UBTDisplayWidget::GetMonitorURL() const
 {
 	FString HtmlPath = FPaths::ConvertRelativePathToFull(
-		FPaths::ProjectDir() / TEXT("HUD/arborist/viewer/viewer.html"));
+		FPaths::ProjectContentDir() / TEXT("HUD/arborist/viewer/viewer.html"));
 	HtmlPath.ReplaceInline(TEXT("\\"), TEXT("/"));
 	return TEXT("file:///") + HtmlPath;
 }
@@ -26,9 +27,31 @@ void UBTDisplayWidget::TogglePanel()
 	bExpanded = !bExpanded;
 }
 
+void UBTDisplayWidget::NotifyContentReady()
+{
+	bContentReady = true;
+}
+
+void UBTDisplayWidget::HandleConsoleMessage(const FString& Message, const FString& Source, int32 Line)
+{
+	if (Message.Contains(TEXT("BT_VIEWER_READY")))
+		bContentReady = true;
+}
+
 void UBTDisplayWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	if (WidgetTree)
+	{
+		UWebBrowser* Browser = nullptr;
+		WidgetTree->ForEachWidget([&Browser](UWidget* W) {
+			if (!Browser) Browser = Cast<UWebBrowser>(W);
+		});
+		if (Browser)
+			Browser->OnConsoleMessage.AddDynamic(this, &UBTDisplayWidget::HandleConsoleMessage);
+	}
+
 	CachedBtn = Cast<UButton>(GetWidgetFromName(TEXT("Button_0")));
 	if (!CachedBtn) return;
 	UButton* Btn = CachedBtn;
@@ -70,6 +93,12 @@ void UBTDisplayWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 	StripePhase = FMath::Fmod(StripePhase + InDeltaTime * 40.f, 1000.f);
+	if (!bContentReady)
+	{
+		LoadingElapsed += InDeltaTime;
+		if (LoadingElapsed >= 15.f)
+			bContentReady = true;
+	}
 }
 
 int32 UBTDisplayWidget::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,
@@ -78,6 +107,7 @@ int32 UBTDisplayWidget::NativePaint(const FPaintArgs& Args, const FGeometry& All
 {
 	if (!CachedBtn) CachedBtn = Cast<UButton>(GetWidgetFromName(TEXT("Button_0")));
 	const UCanvasPanelSlot* BtnSlot = CachedBtn ? Cast<UCanvasPanelSlot>(CachedBtn->Slot) : nullptr;
+	const FSlateBrush* White = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
 	if (BtnSlot)
 	{
 		const FVector2D WSize     = AllottedGeometry.GetLocalSize();
@@ -91,8 +121,6 @@ int32 UBTDisplayWidget::NativePaint(const FPaintArgs& Args, const FGeometry& All
 
 		if (LocalSize.X > 1.f && LocalSize.Y > 1.f)
 		{
-			const FSlateBrush* White = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
-
 			FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
 				AllottedGeometry.ToPaintGeometry(
 					FVector2f((float)LocalSize.X, (float)LocalSize.Y),
@@ -147,6 +175,39 @@ int32 UBTDisplayWidget::NativePaint(const FPaintArgs& Args, const FGeometry& All
 		}
 	}
 
-	return Super::NativePaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements,
+	LayerId = Super::NativePaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements,
 		LayerId, InWidgetStyle, bParentEnabled);
+
+	if (bExpanded && !bContentReady)
+	{
+		const FVector2D WSize = AllottedGeometry.GetLocalSize();
+		const float CX     = WSize.X * 0.5f;
+		const float CY     = WSize.Y * 0.5f;
+		const float Radius = FMath::Min(WSize.X, WSize.Y) * 0.06f;
+		const float DotR   = FMath::Max(2.f, Radius * 0.25f);
+		const float Phase  = FMath::Fmod(LoadingElapsed * 2.5f, 1.0f);
+		const float HeadDeg = Phase * 360.f;
+
+		for (int32 I = 0; I < 8; ++I)
+		{
+			const float DotDeg  = I * 45.f;
+			const float Diff    = FMath::Fmod(HeadDeg - DotDeg + 360.f, 360.f);
+			float A = (Diff < 315.f) ? (1.f - Diff / 315.f) : 0.05f;
+			A = FMath::Pow(A, 1.5f) * 0.95f;
+
+			const float Rad = FMath::DegreesToRadians(DotDeg);
+			const float DX2 = CX + FMath::Sin(Rad) * Radius;
+			const float DY2 = CY - FMath::Cos(Rad) * Radius;
+
+			FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
+				AllottedGeometry.ToPaintGeometry(
+					FVector2f(DotR * 2.f, DotR * 2.f),
+					FSlateLayoutTransform(FVector2f(DX2 - DotR, DY2 - DotR))),
+				White, ESlateDrawEffect::None,
+				FLinearColor(0.85f, 0.62f, 0.04f, A));
+		}
+		++LayerId;
+	}
+
+	return LayerId;
 }

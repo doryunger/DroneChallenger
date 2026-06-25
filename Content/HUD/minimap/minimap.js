@@ -118,7 +118,7 @@ function frame(now) {
         S.inFov   = d.inFov;
         if (d.fovDeg     !== undefined) S.fovDeg     = d.fovDeg;
         if (d.detRangeCm !== undefined) S.detRangeCm = d.detRangeCm;
-        if (!hasData) { hasData = true; cv.style.visibility = 'visible'; }
+        if (!hasData) { hasData = true; cv.style.visibility = 'visible'; console.log('MINIMAP_READY'); }
     }
     const dt = prevFrameMs > 0 ? Math.min((now - prevFrameMs) / 1000, 0.1) : 0;
     prevFrameMs = now;

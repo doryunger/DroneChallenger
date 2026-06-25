@@ -147,6 +147,7 @@ async function loadTree() {
       console.log('[BT] afterDrawing — nodes:', ids.length,
         ids.length ? 'first pos: ' + JSON.stringify(pos[ids[0]]) : '');
       network.fit({ animation: false });
+      console.log('BT_VIEWER_READY');
     });
 
     container.style.position = 'relative';

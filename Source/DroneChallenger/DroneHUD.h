@@ -10,6 +10,7 @@ class UDroneCrosshairWidget;
 class UMiniMapWidget;
 class UDroneLoadingWidget;
 class UDroneResultWidget;
+class UDroneOptionsWidget;
 class ADroneActor;
 class ATargetPawn;
 
@@ -31,6 +32,7 @@ public:
     TSubclassOf<UDroneCrosshairWidget> CrosshairWidgetClass;
 
     void NotifyHUDServerReady();
+    void ToggleOptions();
 
 protected:
     virtual void BeginPlay() override;
@@ -44,7 +46,13 @@ private:
     UPROPERTY() TObjectPtr<UDroneCrosshairWidget> CrosshairWidget;
     UPROPERTY() TObjectPtr<UDroneLoadingWidget>   LoadingWidget;
     UPROPERTY() TObjectPtr<UDroneResultWidget>    ResultWidget;
+    UPROPERTY() TObjectPtr<UDroneOptionsWidget>   OptionsWidget;
+
+    bool bAltitudeStable = false;
+    bool bMinimapReady   = false;
 
     void OnSceneReady();
+    void OnMinimapReady();
+    void TryDismissLoading();
     void OnGameEnded(bool bWon);
 };

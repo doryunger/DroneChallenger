@@ -134,20 +134,50 @@ Prebuilt External UBT module (`Source/ThirdParty/ArboristLib/`). Single static l
 - CCD enabled on `PhysicsBody` (`SetUseCCD(true)`) to prevent tunneling through thin Cesium terrain geometry
 - Crash threshold for upward-normal impacts (`ImpactNormal.Z > 0.5`) lowered from 400 cm/s to 150 cm/s
 
-### Phase 9 — Packaging
-- Enable **Pixel Streaming** plugin in the project (`Edit → Plugins → Pixel Streaming`)
-- Add launch flags to the packaged executable:
-  ```
-  DroneChallenger.exe -PixelStreamingIP=0.0.0.0 -PixelStreamingPort=8888 -AudioMixer -RenderOffScreen
-  ```
-- Disable MonitorServer in shipping (`#if !UE_BUILD_SHIPPING`) — BT visualiser is dev-only
-- Verify Cesium ion API key is a project-scoped key (not personal) before packaging
-- Windows 64-bit shipping build via `Project → Package Project → Windows`
-- Smoke test the packaged build locally before upload
+### Phase 9 — Packaging + transition/UX polish ✅
+
+**Goal**: a working standalone `.exe` that runs correctly on a fresh Windows machine without the editor.
+
+**The key problem**: several runtime files are loaded via `FPaths::ProjectDir()` (standard file I/O, not through UE's asset system). In a packaged build `ProjectDir()` resolves to the folder containing the `.exe`. These files must be explicitly bundled:
+
+| File(s) | Loaded by |
+|---|---|
+| `HUD/minimap/minimap.html`, `minimap.js` | `UMiniMapWidget` — `file:///` URL |
+| `HUD/arborist/viewer/viewer.html` | `UBTDisplayWidget` — `file:///` URL |
+| `Content/Graph/nodes.csv`, `edges.csv` | `DroneGraph` — raw file I/O |
+| `Content/BT/target.yaml` | Arborist — raw file I/O |
+
+**Steps**
+1. Add `HUD/` and `Content/Graph/` and `Content/BT/` to **Project Settings → Packaging → Additional Non-Asset Directories to Copy** so the packager copies them next to the `.exe`
+2. Windows 64-bit Shipping build — `Project → Package Project → Windows`
+3. Smoke test the packaged build locally:
+   - Cesium tiles stream correctly
+   - Drone flies, win/lose condition triggers
+   - BT visualiser loads and shows live BT state
+   - Minimap renders with correct cone
+
+**What shipped**
+- **HUD assets relocated** from project-root `HUD/` into `Content/HUD/`; runtime loaders switched `FPaths::ProjectDir()` → `FPaths::ProjectContentDir()` (`MiniMapWidget`, `BTDisplayWidget`, `DroneGraph`, loading widget). `HUD/`, `BT/`, `Graph/` staged as non-UFS so the `file:///` and raw-IO paths resolve next to the `.exe`.
+- **Cook fixes**: Munich added to `MapsToCook`; `/Game` added to `DirectoriesToAlwaysCook` (the cooker doesn't follow `FName`/`LoadObject` string references, which was dropping the Munich level and `BP_CarDisplay`).
+- **Level-transition blackout** — root cause of the "dusk sky with clouds" flash entering Munich: Munich is a World Partition level, so its `SkyAtmosphere`/`VolumetricCloud`/lighting stream in cold from the pak *after* `LoadMap`, rendering a half-lit sky before the loading widget covered it (packaged-only; in PIE the cells are already resident). Fixed with a `UDroneGameInstance` that sets `UGameViewportClient::bDisableWorldRendering` on entering Munich (via `PostLoadMapWithWorld`) and clears it from `ADroneHUD` once the scene is ready. *Gotcha:* `GameInstanceClass` must live under `[/Script/EngineSettings.GameMapsSettings]`, not `[/Script/Engine.Engine]`, or the engine silently falls back to the default GameInstance.
+- **Loading screen gating**: dismiss now waits for both altitude-stable **and** the minimap actually being ready (`MINIMAP_READY` console sentinel from `minimap.js` → `UMiniMapWidget::OnReady`), so the HUD no longer appears before the minimap canvas.
+- **ESC Options/Pause screen** (`UDroneOptionsWidget`): fade in/out, pauses the sim, "Back to Main Menu" / "Exit", hover-highlighted entries, pixel-art gold styling matching the result screen. Requires in-game mouse cursor — `DroneActor` input mode switched to `GameAndUI` with cursor shown.
+- **BT viewer loading spinner**: animated gold spinner on `UBTDisplayWidget` while `viewer.html` loads, dismissed by a `BT_VIEWER_READY` console sentinel (15s safety fallback).
+- **Minimap size** reduced and decoupled from its bottom margin; frame rate capped (`t.MaxFPS`).
 
 ### Phase 10 — Cloud Deployment (Pixel Streaming on-demand)
 
 **Goal**: a recruiter clicks a URL, waits ~3–4 minutes, and plays the game live in their browser — no install.
+
+**Steps**
+1. Enable **Pixel Streaming plugin** in the project (`Edit → Plugins → Pixel Streaming`), rebuild
+2. Repackage (Shipping) with Pixel Streaming active — the plugin must be baked in
+3. Stand up cloud infrastructure (see below)
+4. Deploy the packaged build to the instance; configure auto-launch on boot with flags:
+   ```
+   DroneChallenger.exe -PixelStreamingIP=0.0.0.0 -PixelStreamingPort=8888 -AudioMixer -RenderOffScreen
+   ```
+5. Portfolio page with wake UI + WebRTC embed
 
 **Infrastructure**
 
@@ -200,8 +230,6 @@ Pixel Stream in the same browser tab
 - Max session: 20 minutes (watchdog stops the instance)
 - If no connection after 5 minutes of starting: auto-stop (failed launch guard)
 
-**Cesium note**: Cesium tile requests originate from the server during Pixel Streaming (the game runs server-side). Ensure the Cesium ion project-scoped key has sufficient tile request quota for server-side rendering.
-
 **Estimated cost for portfolio use**: ~5 recruiter sessions × 20 min = ~$1/month in GPU time + ~$3.65/month Elastic IP = **under $5/month total**.
 
 ---
@@ -210,9 +238,10 @@ Pixel Stream in the same browser tab
 
 | Item | Phase | Status |
 |---|---|---|
-| Pixel Streaming plugin enable + launch flags | 9 | Not started |
-| Cesium ion project-scoped API key | 9 | Not started |
+| Bundle non-asset runtime files (HUD, Graph, BT) in packaging settings | 9 | Not started |
 | Windows 64-bit shipping build | 9 | Not started |
+| Smoke test packaged build locally | 9 | Not started |
+| Enable Pixel Streaming plugin + repackage | 10 | Not started |
 | AWS infrastructure (Lambda, Elastic IP, g4dn) | 10 | Not started |
 | Epic Pixel Streaming Infrastructure on instance | 10 | Not started |
 | Auto-shutdown watchdog script | 10 | Not started |
