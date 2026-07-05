@@ -29,7 +29,7 @@ protected:
     virtual bool NativeSupportsKeyboardFocus() const override;
 
 private:
-    enum class EMenuState : uint8 { Title, Dialog };
+    enum class EMenuState : uint8 { Title, Dialog, BTInfo };
 
     EMenuState State       = EMenuState::Title;
     float      ElapsedTime = 0.f;
@@ -59,4 +59,5 @@ private:
 
     void DrawTitleScreen(const FGeometry& Geom, FSlateWindowElementList& Out, int32& Layer) const;
     void DrawDialogScreen(const FGeometry& Geom, FSlateWindowElementList& Out, int32& Layer) const;
+    void DrawBTInfoScreen(const FGeometry& Geom, FSlateWindowElementList& Out, int32& Layer) const;
 };

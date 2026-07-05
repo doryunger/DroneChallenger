@@ -327,6 +327,134 @@ void UDroneMainMenuWidget::DrawDialogScreen(
     DrawPixelWord(Geom, Out, Layer, BtnLabel, BLX, BLY, BtnPW, FadeAlpha);
 }
 
+void UDroneMainMenuWidget::DrawBTInfoScreen(
+    const FGeometry& Geom, FSlateWindowElementList& Out, int32& Layer) const
+{
+    const FVector2D Size = Geom.GetLocalSize();
+    const float W = Size.X;
+    const float H = Size.Y;
+    const float S = FMath::Min(W, H);
+    const auto& MS = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+
+    SlateBox_MM(Geom, Out, Layer, 0.f, 0.f, W, H,
+        FLinearColor(0.f, 0.f, 0.f, 0.45f * FadeAlpha));
+    ++Layer;
+
+    const float DW  = W * 0.62f;
+    const float DH  = H * 0.84f;
+    const float DX  = (W - DW) * 0.5f;
+    const float DY  = (H - DH) * 0.5f;
+    const float Bdr = FMath::Max(2.f, S * 0.0038f);
+
+    SlateBox_MM(Geom, Out, Layer, DX, DY, DW, DH,
+        FLinearColor(0.00f, 0.00f, 0.06f, 0.99f * FadeAlpha));
+    ++Layer;
+
+    const FLinearColor GoldBdr(0.70f, 0.42f, 0.02f, FadeAlpha);
+    SlateBox_MM(Geom, Out, Layer, DX,             DY,              DW,  Bdr, GoldBdr);
+    SlateBox_MM(Geom, Out, Layer, DX,             DY + DH - Bdr,   DW,  Bdr, GoldBdr);
+    SlateBox_MM(Geom, Out, Layer, DX,             DY,              Bdr, DH,  GoldBdr);
+    SlateBox_MM(Geom, Out, Layer, DX + DW - Bdr,  DY,             Bdr, DH,  GoldBdr);
+    ++Layer;
+
+    const FString HdrTxt = TEXT("BT DISPLAY");
+
+    const float TitlePW = FMath::Max(3.f, FMath::Floor(DW * 0.88f / 95.f));
+    int32       ISz     = FMath::Clamp(FMath::RoundToInt(S * 0.026f), 12, 30);
+
+    const float HdrW = PixelWordWidth(HdrTxt, TitlePW);
+    const float HdrH = 7.f * TitlePW;
+    const float HdrX = DX + (DW - HdrW) * 0.5f;
+    const float HdrY = DY + DH * 0.038f;
+    DrawPixelWord(Geom, Out, Layer, HdrTxt, HdrX, HdrY, TitlePW, FadeAlpha);
+
+    const float DivY = HdrY + HdrH + TitlePW * 2.f;
+    SlateBox_MM(Geom, Out, Layer, DX + Bdr, DivY, DW - Bdr * 2.f,
+        FMath::Max(1.f, S * 0.0018f),
+        FLinearColor(0.52f, 0.30f, 0.01f, FadeAlpha * 0.65f));
+    ++Layer;
+
+    static const TCHAR* Lines[] = {
+        TEXT("A live view of the target's own decision-making,"),
+        TEXT("updated in real time as it reacts to you."),
+        TEXT(""),
+        TEXT("Nodes light up to show which branch of its behavior"),
+        TEXT("tree is currently active — chase, evade, or search."),
+        TEXT(""),
+        TEXT("Switch between Active Branch (just the current path)"),
+        TEXT("and Full Tree (the whole decision structure)."),
+        TEXT(""),
+        TEXT("Open it anytime from the small button in the"),
+        TEXT("corner of the screen during the mission."),
+    };
+
+    const float TextStartY = DivY + DH * 0.05f;
+    const float BtnTopY    = DY + DH - (DH * 0.088f) - DH * 0.038f;
+    const float Available  = BtnTopY - DH * 0.02f - TextStartY;
+    const float Needed     = (float)UE_ARRAY_COUNT(Lines) * ((float)MS->Measure(TEXT("A"),
+        FCoreStyle::GetDefaultFontStyle("Regular", ISz)).Y * 1.40f);
+    if (Needed > Available && Available > 0.f)
+        ISz = FMath::Max(8, FMath::RoundToInt((float)ISz * (Available / Needed)));
+
+    const FSlateFontInfo IF = FCoreStyle::GetDefaultFontStyle("Regular", ISz);
+    const float IH      = (float)MS->Measure(TEXT("A"), IF).Y;
+    const float ILineGp = IH * 1.40f;
+    const float IPadX   = DW * 0.055f;
+    const float IX      = DX + IPadX;
+    float       IY      = TextStartY;
+
+    Out.PushClip(FSlateClippingZone(Geom.ToPaintGeometry(
+        FVector2f(DW - Bdr * 2.f, DH - Bdr * 2.f),
+        FSlateLayoutTransform(FVector2f(DX + Bdr, DY + Bdr)))));
+    for (const TCHAR* Line : Lines)
+    {
+        if (Line[0] != TEXT('\0'))
+        {
+            const FString Str(Line);
+            const float LW = (float)MS->Measure(Str, IF).X;
+            const float LH = (float)MS->Measure(Str, IF).Y;
+            FSlateDrawElement::MakeText(Out, Layer,
+                Geom.ToPaintGeometry(FVector2f(LW + 4.f, LH + 4.f),
+                    FSlateLayoutTransform(FVector2f(IX, IY))),
+                FText::FromString(Str), IF, ESlateDrawEffect::None,
+                FLinearColor(0.86f, 0.86f, 0.86f, FadeAlpha));
+        }
+        IY += ILineGp;
+    }
+    Out.PopClip();
+    ++Layer;
+
+    const float BtnW = DW * 0.36f;
+    const float BtnH = DH * 0.088f;
+    const float BtnX = DX + (DW - BtnW) * 0.5f;
+    const float BtnY = DY + DH - BtnH - DH * 0.038f;
+    CtaMin = FVector2D(BtnX, BtnY);
+    CtaMax = FVector2D(BtnX + BtnW, BtnY + BtnH);
+
+    const bool bHov = MousePos.X >= CtaMin.X && MousePos.X <= CtaMax.X &&
+                      MousePos.Y >= CtaMin.Y && MousePos.Y <= CtaMax.Y;
+
+    SlateBox_MM(Geom, Out, Layer, BtnX, BtnY, BtnW, BtnH,
+        bHov ? FLinearColor(0.04f, 0.06f, 0.20f, FadeAlpha)
+             : FLinearColor(0.00f, 0.00f, 0.06f, FadeAlpha));
+    const FLinearColor BtnBdr = bHov
+        ? FLinearColor(1.00f, 0.90f, 0.25f, FadeAlpha)
+        : FLinearColor(0.72f, 0.44f, 0.02f, FadeAlpha);
+    SlateBox_MM(Geom, Out, Layer, BtnX,              BtnY,               BtnW, Bdr,  BtnBdr);
+    SlateBox_MM(Geom, Out, Layer, BtnX,              BtnY + BtnH - Bdr,  BtnW, Bdr,  BtnBdr);
+    SlateBox_MM(Geom, Out, Layer, BtnX,              BtnY,               Bdr,  BtnH, BtnBdr);
+    SlateBox_MM(Geom, Out, Layer, BtnX + BtnW - Bdr, BtnY,               Bdr,  BtnH, BtnBdr);
+    ++Layer;
+
+    const FString BtnLabel = TEXT("LETS GO");
+    const float BtnPW  = FMath::Max(2.f, FMath::Floor(BtnW * 0.72f / 47.f));
+    const float BLW    = PixelWordWidth(BtnLabel, BtnPW);
+    const float BLH    = 7.f * BtnPW;
+    const float BLX    = BtnX + (BtnW - BLW) * 0.5f;
+    const float BLY    = BtnY + (BtnH - BLH) * 0.5f;
+    DrawPixelWord(Geom, Out, Layer, BtnLabel, BLX, BLY, BtnPW, FadeAlpha);
+}
+
 void UDroneMainMenuWidget::NativeConstruct()
 {
     Super::NativeConstruct();
@@ -445,6 +573,8 @@ int32 UDroneMainMenuWidget::NativePaint(
 
     if (State == EMenuState::Dialog)
         DrawDialogScreen(AllottedGeometry, OutDrawElements, LayerId);
+    else if (State == EMenuState::BTInfo)
+        DrawBTInfoScreen(AllottedGeometry, OutDrawElements, LayerId);
 
     if (bDismissing)
     {
@@ -475,10 +605,19 @@ FReply UDroneMainMenuWidget::NativeOnMouseButtonDown(
         return FReply::Handled();
     }
 
+    if (InMouseEvent.GetEffectingButton() != EKeys::LeftMouseButton)
+        return FReply::Handled();
+
     const FVector2D LocalPos = InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
-    if (LocalPos.X >= CtaMin.X && LocalPos.X <= CtaMax.X &&
-        LocalPos.Y >= CtaMin.Y && LocalPos.Y <= CtaMax.Y)
+    const bool bHitButton = LocalPos.X >= CtaMin.X && LocalPos.X <= CtaMax.X &&
+                            LocalPos.Y >= CtaMin.Y && LocalPos.Y <= CtaMax.Y;
+    if (!bHitButton) return FReply::Handled();
+
+    if (State == EMenuState::Dialog)
+        State = EMenuState::BTInfo;
+    else if (State == EMenuState::BTInfo)
         bDismissing = true;
+
     return FReply::Handled();
 }
 
