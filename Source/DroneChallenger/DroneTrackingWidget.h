@@ -45,4 +45,5 @@ private:
     float CachedBestTime     = 0.f;
     bool  bCachedTracking    = false;
     bool  bCachedHasMoved    = false;
+    bool  bCachedCarStalled  = false;
 };

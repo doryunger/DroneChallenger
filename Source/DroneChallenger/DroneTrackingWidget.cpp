@@ -63,6 +63,7 @@ void UDroneTrackingWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
     CachedBestTime    = Target->BestTrackingTime;
     bCachedTracking   = Target->IsDroneInFOV();
     bCachedHasMoved   = Target->HasDroneMoved();
+    bCachedCarStalled = Target->IsCarStalled();
 }
 
 int32 UDroneTrackingWidget::NativePaint(
@@ -125,6 +126,14 @@ int32 UDroneTrackingWidget::NativePaint(
     DrawStroked(CurrLine, PX, Y, kCurrCol, CurrSz);
     Y += (float)CurrSz.Y + LineGap;
     DrawStroked(BestLine, PX, Y, kWhite,   BestSz);
+
+    if (bCachedCarStalled)
+    {
+        Y += (float)BestSz.Y + LineGap;
+        const FLinearColor kRed { 0.95f, 0.15f, 0.15f, 1.f };
+        const FString WarnLine = TEXT("CAR NOT MOVING — PLACEMENT ISSUE");
+        DrawStroked(WarnLine, PX, Y, kRed, Measure(WarnLine));
+    }
 
     return LayerId + 1;
 }

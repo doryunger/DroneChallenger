@@ -56,6 +56,7 @@ private:
     bool bLoadingActive  = true;
 
     UPROPERTY() TObjectPtr<ADroneActor> CachedDrone;
+    UPROPERTY() TObjectPtr<ATargetPawn> CachedTarget;
 
     FTimerHandle TileStreamPollHandle;
     FTimerHandle MinimapTimeoutHandle;

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
 #include "DroneGraph.h"
+#include "DroneFlightController.h"
 #include "TargetPawn.generated.h"
 
 class UCesiumGlobeAnchorComponent;
@@ -30,6 +31,8 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
+
+	void NotifyLoadingDismissed();
 
 	UPROPERTY(EditAnywhere, Category = "Target|Patrol")
 	TObjectPtr<APatrolPath> PatrolPath;
@@ -63,6 +66,7 @@ public:
 	[[nodiscard]] bool IsDroneInFOV()      const { return bDroneInFOV; }
 	[[nodiscard]] bool HasDroneMoved()     const { return bDroneHasEverMoved; }
 	[[nodiscard]] bool IsHUDServerRunning() const;
+	[[nodiscard]] bool IsCarStalled()      const { return bDemoModeRequested && bCarStalled; }
 
 private:
 	UPROPERTY(VisibleAnywhere, Category = "Components")
@@ -114,6 +118,7 @@ private:
 	bool bDroneHasLOS = false;
 	bool bOnEvadePath = false;
 	bool bDroneHasEverMoved = false;
+	bool bAltitudeConfirmed = false;
 	float CaptureTimer = 0.0f;
 	float LastDeltaTime = 0.0f;
 	float CurrentSpeed = 0.0f;
@@ -134,6 +139,41 @@ private:
 	bool ShouldAcceptAltitude(float CandidateZ);
 	void CheckAltitudeStability();
 	void RetryHUDServer();
+
+	enum class EDemoPhase : uint8 { Inactive, WaitingToStart, Takeoff, Spin, Chase, Done };
+
+	bool       bDemoModeRequested          = false;
+	EDemoPhase DemoPhase                  = EDemoPhase::Inactive;
+	FVector    DemoAnchorWorldPos         = FVector::ZeroVector;
+	FVector    DemoInterceptPoint         = FVector::ZeroVector;
+	float      DemoSpinStartYaw           = 0.0f;
+	float      DemoSpinTotalDeltaDeg      = 270.0f;
+	float      DemoInterceptRecalcTimer   = 0.0f;
+
+	static constexpr float DemoTakeoffAltitudeCm      = 6000.0f;
+	static constexpr float DemoSpinAltitudeCm         = 8000.0f;
+	static constexpr float DemoSpinYawInput           = 0.4f;
+	static constexpr float DemoChaseHighAltAboveCarCm = 8000.0f;
+	static constexpr float DemoChaseLowAltAboveCarCm  = 250.0f;
+	static constexpr float DemoChaseGlideStartDistCm  = 30000.0f;
+	static constexpr float DemoCarSpeedScale          = 0.5f;
+	static constexpr float DemoDroneCruiseSpeedCms    = 1400.0f;
+	static constexpr float DemoInterceptRecalcInterval = 1.0f;
+	static constexpr int32 DemoCarStartNodeId         = 26;
+	static constexpr float DemoCarPathDistanceCm      = 500000.0f;
+	static constexpr int32 DemoCarPathBiasSteps       = 15;
+
+	void SetupDemoMode();
+	void TickDemoAutopilot(float DeltaTime);
+	void RecalculateDemoIntercept();
+	FDroneControlInput ComputeDemoSteering(const FVector& DronePos, const FVector& TargetXY, float TargetZ) const;
+
+	bool    bCarStalled       = false;
+	bool    bCarStallBaseline = false;
+	FVector CarStallLastPos   = FVector::ZeroVector;
+	float   CarStallTimer     = 0.0f;
+	static constexpr float CarStallCheckInterval = 2.0f;
+	static constexpr float CarStallMinMoveCm     = 50.0f;
 
 	FVector      DroneEditorPos;
 	float        PlacementRadius    = 20000.0f;

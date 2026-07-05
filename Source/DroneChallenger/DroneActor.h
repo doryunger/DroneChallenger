@@ -30,6 +30,9 @@ public:
 
 	[[nodiscard]] bool IsFPVMode() const { return bFPVMode; }
 
+	void SetAutopilotActive(bool bActive);
+	void SetAutopilotInput(const FDroneControlInput& Input);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void PossessedBy(AController* NewController) override;
@@ -122,9 +125,11 @@ private:
 	float RotorCurrentSpinRate[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	FDroneControlInput ControlInput;
 	FDroneControlInput SmoothedInput;
+	FDroneControlInput AutopilotInput;
 
-	bool bFPVMode   = false;
-	bool bGameOver  = false;
+	bool bFPVMode       = false;
+	bool bGameOver      = false;
+	bool bAutopilotActive = false;
 
 	void InitHoverThrottle();
 	void ApplyRotorForces();

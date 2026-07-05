@@ -267,6 +267,18 @@ void ADroneActor::OnSwitchCamera(const FInputActionValue&)
 	FPVCamera->SetActive(bFPVMode);
 }
 
+void ADroneActor::SetAutopilotActive(bool bActive)
+{
+	bAutopilotActive = bActive;
+	if (!bActive)
+		AutopilotInput = FDroneControlInput();
+}
+
+void ADroneActor::SetAutopilotInput(const FDroneControlInput& Input)
+{
+	AutopilotInput = Input;
+}
+
 void ADroneActor::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
@@ -283,6 +295,15 @@ void ADroneActor::Tick(float DeltaTime)
 		                  - (PC->IsInputKeyDown(EKeys::A) ? 1.f : 0.f);
 		ControlInput.Throttle = (PC->IsInputKeyDown(EKeys::W) ? 1.f : 0.f)
 		                      - (PC->IsInputKeyDown(EKeys::S) ? 1.f : 0.f);
+	}
+
+	if (bAutopilotActive)
+	{
+		static constexpr float Deadzone = 0.05f;
+		if (FMath::Abs(ControlInput.Throttle) < Deadzone) ControlInput.Throttle = AutopilotInput.Throttle;
+		if (FMath::Abs(ControlInput.Pitch)    < Deadzone) ControlInput.Pitch    = AutopilotInput.Pitch;
+		if (FMath::Abs(ControlInput.Roll)     < Deadzone) ControlInput.Roll     = AutopilotInput.Roll;
+		if (FMath::Abs(ControlInput.Yaw)      < Deadzone) ControlInput.Yaw      = AutopilotInput.Yaw;
 	}
 
 	const float AngVelMag = PhysicsBody->GetPhysicsAngularVelocityInDegrees().Size();

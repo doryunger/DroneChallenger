@@ -25,6 +25,7 @@ void ADroneHUD::BeginPlay()
     CachedDrone         = Cast<ADroneActor>(UGameplayStatics::GetActorOfClass(GetWorld(), ADroneActor::StaticClass()));
     ADroneActor* Drone  = CachedDrone.Get();
     ATargetPawn* Target = Cast<ATargetPawn>(UGameplayStatics::GetActorOfClass(GetWorld(), ATargetPawn::StaticClass()));
+    CachedTarget        = Target;
 
     if (BTDisplayWidgetClass)
     {
@@ -105,7 +106,6 @@ void ADroneHUD::BeginPlay()
         if (PC->InputComponent)
             PC->InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ADroneHUD::ToggleOptions);
 
-    // Block drone input until the scene is fully ready.
     if (CachedDrone)
         CachedDrone->DisableInput(GetOwningPlayerController());
 
@@ -155,7 +155,6 @@ void ADroneHUD::TryDismissLoading()
 
     GetWorldTimerManager().ClearTimer(TileStreamPollHandle);
 
-    // Scene is ready: WP cells streamed, Cesium tiles loaded, altitude settled.
     bLoadingActive = false;
 
     if (CachedDrone)
@@ -166,6 +165,7 @@ void ADroneHUD::TryDismissLoading()
 
     if (LoadingWidget)   LoadingWidget->Dismiss();
     if (BTDisplay)       BTDisplay->NotifyLoadingDismissed();
+    if (CachedTarget)    CachedTarget->NotifyLoadingDismissed();
     if (MiniMapBrowser)  MiniMapBrowser->SetRenderOpacity(1.f);
     if (ADroneGameMode* GM = GetWorld()->GetAuthGameMode<ADroneGameMode>())
         GM->StartChaseTimer();
@@ -177,7 +177,6 @@ void ADroneHUD::PollTileStreaming()
     UWorld* W = GetWorld();
     if (!W) return;
 
-    // Wait for World Partition cells (sky, atmosphere, lighting actors) to stream in.
     if (UWorldPartitionSubsystem* WPS = W->GetSubsystem<UWorldPartitionSubsystem>())
     {
         if (!WPS->IsStreamingCompleted())
