@@ -147,6 +147,7 @@ private:
 	float      DemoClimbTargetZ           = 0.0f;
 	float      DemoSpinStartYaw           = 0.0f;
 	int32      DemoWaypointIndex          = 0;
+	float      DemoCurrentAltAboveCarCm   = 0.0f;
 
 	static constexpr float DemoClimbHeightCm          = 3000.0f;
 	static constexpr float DemoSpinTotalDeltaDeg      = 180.0f;
@@ -155,6 +156,7 @@ private:
 	static constexpr float DemoChaseHighAltAboveCarCm = 8000.0f;
 	static constexpr float DemoChaseLowAltAboveCarCm  = 250.0f;
 	static constexpr float DemoChaseGlideStartDistCm  = 30000.0f;
+	static constexpr float DemoAltGlideRateCms        = 300.0f;
 	static constexpr float DemoWaypointArriveDistCm   = 500.0f;
 
 	void TickDemoAutopilot(float DeltaTime);

@@ -1036,14 +1036,16 @@ void ATargetPawn::TickDemoAutopilot(float DeltaTime)
 
 			if (FMath::Abs(YawError) < DemoCorrectYawToleranceDeg)
 			{
-				DemoWaypointIndex = FMath::Clamp(PathNodeIndex + 1, 0, FMath::Max(0, CurrentPath.Num() - 1));
-				DemoPhase = EDemoPhase::Chase;
+				DemoWaypointIndex        = FMath::Clamp(PathNodeIndex + 1, 0, FMath::Max(0, CurrentPath.Num() - 1));
+				DemoCurrentAltAboveCarCm = DemoChaseHighAltAboveCarCm;
+				DemoPhase                = EDemoPhase::Chase;
 			}
 		}
 		else
 		{
-			DemoWaypointIndex = FMath::Clamp(PathNodeIndex + 1, 0, FMath::Max(0, CurrentPath.Num() - 1));
-			DemoPhase = EDemoPhase::Chase;
+			DemoWaypointIndex        = FMath::Clamp(PathNodeIndex + 1, 0, FMath::Max(0, CurrentPath.Num() - 1));
+			DemoCurrentAltAboveCarCm = DemoChaseHighAltAboveCarCm;
+			DemoPhase                = EDemoPhase::Chase;
 		}
 
 		CachedDrone->SetAutopilotInput(CorrectInput);
@@ -1071,10 +1073,14 @@ void ATargetPawn::TickDemoAutopilot(float DeltaTime)
 			}
 		}
 
-		const float DistToCar         = FVector::Dist2D(DronePos, CarPos);
-		const float GlideT            = FMath::Clamp(DistToCar / DemoChaseGlideStartDistCm, 0.0f, 1.0f);
-		const float TargetAltAboveCar = FMath::Lerp(DemoChaseLowAltAboveCarCm, DemoChaseHighAltAboveCarCm, GlideT);
-		const float TargetZ           = CarPos.Z + TargetAltAboveCar;
+		const float DistToCar     = FVector::Dist2D(DronePos, CarPos);
+		const float GlideT        = FMath::Clamp(DistToCar / DemoChaseGlideStartDistCm, 0.0f, 1.0f);
+		const float GoalAltAboveCar = FMath::Lerp(DemoChaseLowAltAboveCarCm, DemoChaseHighAltAboveCarCm, GlideT);
+
+		DemoCurrentAltAboveCarCm = FMath::FInterpConstantTo(
+			DemoCurrentAltAboveCarCm, GoalAltAboveCar, DeltaTime, DemoAltGlideRateCms);
+
+		const float TargetZ = CarPos.Z + DemoCurrentAltAboveCarCm;
 
 		CachedDrone->SetAutopilotInput(ComputeDemoSteering(DronePos, TargetXY, TargetZ));
 		break;
