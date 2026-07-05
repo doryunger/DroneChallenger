@@ -14,6 +14,8 @@ class DRONECHALLENGER_API UDroneMainMenuWidget : public UUserWidget
 public:
     FOnMenuContinue OnContinue;
 
+    void NotifyPreviewCaptured();
+
 protected:
     virtual void NativeConstruct() override;
     virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
@@ -46,6 +48,8 @@ private:
     UPROPERTY() TObjectPtr<UMaterialInterface> DroneMat;
     FSlateBrush    DroneBrush;
     bool           bDroneBrushReady = false;
+
+    bool bPreviewCaptured = false;
 
     static float PixelWordWidth(const FString& Word, float PixelW);
 

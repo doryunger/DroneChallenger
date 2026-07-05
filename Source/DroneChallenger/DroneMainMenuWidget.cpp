@@ -6,7 +6,7 @@
 #include "InputCoreTypes.h"
 #include "Engine/TextureRenderTarget2D.h"
 
-static void SlateBox(const FGeometry& Geom, FSlateWindowElementList& Out, int32 Layer,
+static void SlateBox_MM(const FGeometry& Geom, FSlateWindowElementList& Out, int32 Layer,
     float X, float Y, float W, float H, const FLinearColor& Col)
 {
     FSlateDrawElement::MakeBox(Out, Layer,
@@ -100,7 +100,7 @@ void UDroneMainMenuWidget::DrawPixelWord(
                 Col.A = Alpha;
                 for (int32 col = 0; col < 5; ++col)
                     if (G->Rows[row] & (1u << (4 - col)))
-                        SlateBox(Geom, Out, Layer,
+                        SlateBox_MM(Geom, Out, Layer,
                             CurX + col * PixelW, TopY + row * PixelW,
                             PixelW, PixelW, Col);
             }
@@ -136,7 +136,7 @@ void UDroneMainMenuWidget::DrawTitleScreen(
 
     const float LineY = TitleY + CharH + PixelW * 2.f;
     const float LineW = TotalW * 0.60f;
-    SlateBox(Geom, Out, Layer,
+    SlateBox_MM(Geom, Out, Layer,
         (W - LineW) * 0.5f, LineY, LineW, FMath::Max(2.f, PixelW * 0.28f),
         FLinearColor(0.68f, 0.40f, 0.02f, FadeAlpha * 0.85f));
     ++Layer;
@@ -153,7 +153,7 @@ void UDroneMainMenuWidget::DrawTitleScreen(
             FLinearColor(0.92f, 0.62f, 0.03f, 1.0f));
     }
 
-    if (bDroneBrushReady)
+    if (bDroneBrushReady && bPreviewCaptured)
     {
         const float DroneW = W * 0.20f;
         const float DroneH = DroneW;
@@ -165,7 +165,7 @@ void UDroneMainMenuWidget::DrawTitleScreen(
         ++Layer;
     }
 
-    if (bCarBrushReady)
+    if (bCarBrushReady && bPreviewCaptured)
     {
         const float CarW = W * 0.50f;
         const float CarH = CarW * (72.f / 128.f);
@@ -187,7 +187,7 @@ void UDroneMainMenuWidget::DrawDialogScreen(
     const float S = FMath::Min(W, H);
     const auto& MS = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
 
-    SlateBox(Geom, Out, Layer, 0.f, 0.f, W, H,
+    SlateBox_MM(Geom, Out, Layer, 0.f, 0.f, W, H,
         FLinearColor(0.f, 0.f, 0.f, 0.45f * FadeAlpha));
     ++Layer;
 
@@ -197,15 +197,15 @@ void UDroneMainMenuWidget::DrawDialogScreen(
     const float DY  = (H - DH) * 0.5f;
     const float Bdr = FMath::Max(2.f, S * 0.0038f);
 
-    SlateBox(Geom, Out, Layer, DX, DY, DW, DH,
+    SlateBox_MM(Geom, Out, Layer, DX, DY, DW, DH,
         FLinearColor(0.00f, 0.00f, 0.06f, 0.99f * FadeAlpha));
     ++Layer;
 
     const FLinearColor GoldBdr(0.70f, 0.42f, 0.02f, FadeAlpha);
-    SlateBox(Geom, Out, Layer, DX,             DY,              DW,  Bdr, GoldBdr);
-    SlateBox(Geom, Out, Layer, DX,             DY + DH - Bdr,   DW,  Bdr, GoldBdr);
-    SlateBox(Geom, Out, Layer, DX,             DY,              Bdr, DH,  GoldBdr);
-    SlateBox(Geom, Out, Layer, DX + DW - Bdr,  DY,             Bdr, DH,  GoldBdr);
+    SlateBox_MM(Geom, Out, Layer, DX,             DY,              DW,  Bdr, GoldBdr);
+    SlateBox_MM(Geom, Out, Layer, DX,             DY + DH - Bdr,   DW,  Bdr, GoldBdr);
+    SlateBox_MM(Geom, Out, Layer, DX,             DY,              Bdr, DH,  GoldBdr);
+    SlateBox_MM(Geom, Out, Layer, DX + DW - Bdr,  DY,             Bdr, DH,  GoldBdr);
     ++Layer;
 
     const FString HdrTxt = TEXT("MISSION BRIEFING");
@@ -219,7 +219,7 @@ void UDroneMainMenuWidget::DrawDialogScreen(
         const float TmpIH      = (float)MS->Measure(TEXT("A"), TmpIF).Y;
         const float TmpILineGp = TmpIH * 1.40f;
         const float Available  = DH * 0.77f - 9.f * TitlePW;
-        const float Needed     = 9.f * TmpILineGp + 18.f * HdrPW + TmpIH;
+        const float Needed     = 11.f * TmpILineGp + 18.f * HdrPW + TmpIH;
         if (Needed > Available && Available > 0.f)
         {
             const float ScaleF = Available / Needed;
@@ -236,7 +236,7 @@ void UDroneMainMenuWidget::DrawDialogScreen(
     DrawPixelWord(Geom, Out, Layer, HdrTxt, HdrX, HdrY, TitlePW, FadeAlpha);
 
     const float DivY = HdrY + HdrH + TitlePW * 2.f;
-    SlateBox(Geom, Out, Layer, DX + Bdr, DivY, DW - Bdr * 2.f,
+    SlateBox_MM(Geom, Out, Layer, DX + Bdr, DivY, DW - Bdr * 2.f,
         FMath::Max(1.f, S * 0.0018f),
         FLinearColor(0.52f, 0.30f, 0.01f, FadeAlpha * 0.65f));
     ++Layer;
@@ -252,17 +252,19 @@ void UDroneMainMenuWidget::DrawDialogScreen(
 
     struct FInstrLine { const TCHAR* Text; bool bHeader; };
     static const FInstrLine Lines[] = {
-        { TEXT(""),                                            false },
-        { TEXT("THE MISSION"),                               true  },
-        { TEXT("Keep the target vehicle in camera view."),     false },
-        { TEXT("Score = longest continuous lock-on time."),    false },
-        { TEXT("Stay within 1 m of the car to capture it."),   false },
-        { TEXT(""),                                            false },
+        { TEXT(""),                                                                   false },
+        { TEXT("THE MISSION"),                                                    true  },
+        { TEXT("Pursue the suspect vehicle and complete one of the following:"),  false },
+        { TEXT("Chase: maintain visual contact for 30 consecutive seconds."),     false },
+        { TEXT("Capture: close within 3 m and hold position for 3 seconds."),    false },
+        { TEXT("Losing sight of the vehicle resets the chase timer."),            false },
+        { TEXT("Mission time limit: 10 minutes."),                                false },
+        { TEXT(""),                                                                false },
         { TEXT("KEYS"),                                       true  },
         { TEXT("W / S  - throttle up / down"),                 false },
         { TEXT("D / A  - roll right / left"),                  false },
         { TEXT("E / Q  - yaw right / left"),                   false },
-        { TEXT("C      - change camera"),                      false },
+        { TEXT(" C     - change camera"),                      false },
     };
 
     Out.PushClip(FSlateClippingZone(Geom.ToPaintGeometry(
@@ -289,7 +291,7 @@ void UDroneMainMenuWidget::DrawDialogScreen(
                     FLinearColor(0.86f, 0.86f, 0.86f, FadeAlpha));
             }
         }
-        IY += L.bHeader ? (HdrPH + HdrPW * 2.f) : ILineGp;
+        IY += L.bHeader ? (HdrPH + ILineGp * 0.7f) : ILineGp;
     }
     Out.PopClip();
     ++Layer;
@@ -304,16 +306,16 @@ void UDroneMainMenuWidget::DrawDialogScreen(
     const bool bHov = MousePos.X >= CtaMin.X && MousePos.X <= CtaMax.X &&
                       MousePos.Y >= CtaMin.Y && MousePos.Y <= CtaMax.Y;
 
-    SlateBox(Geom, Out, Layer, BtnX, BtnY, BtnW, BtnH,
+    SlateBox_MM(Geom, Out, Layer, BtnX, BtnY, BtnW, BtnH,
         bHov ? FLinearColor(0.04f, 0.06f, 0.20f, FadeAlpha)
              : FLinearColor(0.00f, 0.00f, 0.06f, FadeAlpha));
     const FLinearColor BtnBdr = bHov
         ? FLinearColor(1.00f, 0.90f, 0.25f, FadeAlpha)
         : FLinearColor(0.72f, 0.44f, 0.02f, FadeAlpha);
-    SlateBox(Geom, Out, Layer, BtnX,              BtnY,               BtnW, Bdr,  BtnBdr);
-    SlateBox(Geom, Out, Layer, BtnX,              BtnY + BtnH - Bdr,  BtnW, Bdr,  BtnBdr);
-    SlateBox(Geom, Out, Layer, BtnX,              BtnY,               Bdr,  BtnH, BtnBdr);
-    SlateBox(Geom, Out, Layer, BtnX + BtnW - Bdr, BtnY,               Bdr,  BtnH, BtnBdr);
+    SlateBox_MM(Geom, Out, Layer, BtnX,              BtnY,               BtnW, Bdr,  BtnBdr);
+    SlateBox_MM(Geom, Out, Layer, BtnX,              BtnY + BtnH - Bdr,  BtnW, Bdr,  BtnBdr);
+    SlateBox_MM(Geom, Out, Layer, BtnX,              BtnY,               Bdr,  BtnH, BtnBdr);
+    SlateBox_MM(Geom, Out, Layer, BtnX + BtnW - Bdr, BtnY,               Bdr,  BtnH, BtnBdr);
     ++Layer;
 
     const FString BtnLabel = TEXT("CONTINUE");
@@ -331,11 +333,13 @@ void UDroneMainMenuWidget::NativeConstruct()
     SetIsFocusable(true);
     SetVisibility(ESlateVisibility::Visible);
 
-    UTextureRenderTarget2D* RT = LoadObject<UTextureRenderTarget2D>(nullptr, TEXT("/Game/RT_CarPreview"));
-    if (RT)
+    if (UTextureRenderTarget2D* RT = LoadObject<UTextureRenderTarget2D>(nullptr, TEXT("/Game/RT_CarPreview")))
     {
-        RT->Filter = TF_Nearest;
-        RT->UpdateResource();
+        UE_LOG(LogTemp, Log, TEXT("DroneMainMenu: RT_CarPreview found (%dx%d)"), RT->SizeX, RT->SizeY);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("DroneMainMenu: RT_CarPreview not found"));
     }
 
     CarMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/M_CarPreview"));
@@ -344,13 +348,20 @@ void UDroneMainMenuWidget::NativeConstruct()
         CarBrush.SetResourceObject(CarMat);
         CarBrush.ImageSize = FVector2D(128.f, 72.f);
         bCarBrushReady = true;
+        UE_LOG(LogTemp, Log, TEXT("DroneMainMenu: M_CarPreview loaded — car brush ready (RT content depends on SceneCapture BP in level)"));
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("DroneMainMenu: M_CarPreview not found — car preview disabled"));
     }
 
-    UTextureRenderTarget2D* DroneRT = LoadObject<UTextureRenderTarget2D>(nullptr, TEXT("/Game/RT_DronePreview"));
-    if (DroneRT)
+    if (UTextureRenderTarget2D* DroneRT = LoadObject<UTextureRenderTarget2D>(nullptr, TEXT("/Game/RT_DronePreview")))
     {
-        DroneRT->Filter = TF_Nearest;
-        DroneRT->UpdateResource();
+        UE_LOG(LogTemp, Log, TEXT("DroneMainMenu: RT_DronePreview found (%dx%d)"), DroneRT->SizeX, DroneRT->SizeY);
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("DroneMainMenu: RT_DronePreview not found"));
     }
 
     DroneMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/M_DronePreview"));
@@ -360,6 +371,15 @@ void UDroneMainMenuWidget::NativeConstruct()
         DroneBrush.ImageSize = FVector2D(128.f, 128.f);
         bDroneBrushReady = true;
     }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("DroneMainMenu: M_DronePreview not found — drone preview disabled"));
+    }
+}
+
+void UDroneMainMenuWidget::NotifyPreviewCaptured()
+{
+    bPreviewCaptured = true;
 }
 
 bool UDroneMainMenuWidget::NativeSupportsKeyboardFocus() const
@@ -415,7 +435,7 @@ int32 UDroneMainMenuWidget::NativePaint(
             const float T = (float)i / (float)(NumBands - 1);
             FLinearColor Col = FMath::Lerp(BgTop, BgBot, T);
             Col.A = BgAlpha;
-            SlateBox(AllottedGeometry, OutDrawElements, LayerId,
+            SlateBox_MM(AllottedGeometry, OutDrawElements, LayerId,
                 0.f, i * BandH, Size.X, FMath::Min(BandH + 1.f, Size.Y - i * BandH), Col);
         }
     }
@@ -428,7 +448,7 @@ int32 UDroneMainMenuWidget::NativePaint(
 
     if (bDismissing)
     {
-        SlateBox(AllottedGeometry, OutDrawElements, LayerId,
+        SlateBox_MM(AllottedGeometry, OutDrawElements, LayerId,
             0.f, 0.f, Size.X, Size.Y,
             FLinearColor(0.f, 0.f, 0.f, 1.f - FadeAlpha));
         ++LayerId;

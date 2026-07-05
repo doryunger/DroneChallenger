@@ -226,11 +226,6 @@ void ADroneActor::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
 		return;
 	}
 
-	if (IA_Throttle)
-	{
-		EIC->BindAction(IA_Throttle, ETriggerEvent::Triggered, this, &ADroneActor::OnThrottle);
-		EIC->BindAction(IA_Throttle, ETriggerEvent::Completed, this, &ADroneActor::OnThrottleCompleted);
-	}
 	if (IA_PitchRoll)
 	{
 		EIC->BindAction(IA_PitchRoll, ETriggerEvent::Triggered, this, &ADroneActor::OnPitchRoll);
@@ -243,16 +238,6 @@ void ADroneActor::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
 	}
 	if (IA_SwitchCamera)
 		EIC->BindAction(IA_SwitchCamera, ETriggerEvent::Started, this, &ADroneActor::OnSwitchCamera);
-}
-
-void ADroneActor::OnThrottle(const FInputActionValue& Value)
-{
-	ControlInput.Throttle = Value.Get<float>();
-}
-
-void ADroneActor::OnThrottleCompleted(const FInputActionValue&)
-{
-	ControlInput.Throttle = 0.0f;
 }
 
 void ADroneActor::OnPitchRoll(const FInputActionValue& Value)
@@ -296,6 +281,8 @@ void ADroneActor::Tick(float DeltaTime)
 	{
 		ControlInput.Roll = (PC->IsInputKeyDown(EKeys::D) ? 1.f : 0.f)
 		                  - (PC->IsInputKeyDown(EKeys::A) ? 1.f : 0.f);
+		ControlInput.Throttle = (PC->IsInputKeyDown(EKeys::W) ? 1.f : 0.f)
+		                      - (PC->IsInputKeyDown(EKeys::S) ? 1.f : 0.f);
 	}
 
 	const float AngVelMag = PhysicsBody->GetPhysicsAngularVelocityInDegrees().Size();

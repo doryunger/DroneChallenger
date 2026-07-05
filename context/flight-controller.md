@@ -65,6 +65,20 @@ X = forward, Y = right.
 
 Rotor drag torque is applied as a separate `AddTorqueInRadians` call scaled by `YawTorqueCoeff` rather than being derived from simulated RPM. This decouples yaw authority from the thrust model, making it tunable independently. `YawSpin[4] = {+1, -1, -1, +1}` — index order matches motor indices 0–3 (FL, FR, RL, RR).
 
+## Recovery near full inversion (±180° tilt)
+
+`TiltPitchRad`/`TiltRollRad` (`Atan2(-ActorUp.X, ActorUp.Z)` / `Atan2(ActorUp.Y, ActorUp.Z)`) track true tilt angle exactly for a pure single-axis rotation, but `atan2` has a branch cut at ±180°: a tilt of -179° and its physical neighbor one degree further into the same rotation reads as +179°, not -180°+1°. The sign flips discontinuously exactly at full inversion.
+
+`bPitchCorrects`/`bRollCorrects` gate full-rate recovery authority on `Input.Axis * TiltAxisRad < 0` (stick pushing to reduce tilt) once angular velocity has decayed below the 2°/s threshold that would otherwise satisfy the bypass on its own. Right at the ±180° pole this sign test can read backwards for whichever direction the stick is pushed — `LimitScale` is already pinned to 0 that far past `MaxTiltAngleDeg`, so the drone commands exactly zero rate and holds there regardless of input, indistinguishable from a stuck axis.
+
+Physically, direction-of-correction is undefined exactly at the pole (same as "which way is east" at the North Pole) — any rotation away from maximum tilt is an improvement, so there's nothing to gate. `bPitchNearInverted`/`bRollNearInverted` (`|TiltAxisRad| > π - π/12`, i.e. within 15° of full inversion — reusing the same 15° band width `LimitScale` already uses) bypass the sign check entirely inside that band, restoring full authority regardless of which side of the branch cut the current tilt reads on. This is symmetric between pitch and roll — both axes share the identical bypass shape, so both were equally exposed; pitch just reaches the pole far more often in practice (diving nose-first) than roll does.
+
+## Input capture: raw key polling instead of Enhanced Input events
+
+`ControlInput.Roll` and `ControlInput.Throttle` are recomputed from `PlayerController::IsInputKeyDown` every `Tick` (D/A for Roll, W/S for Throttle) instead of being set by Enhanced Input `Triggered`/`Completed` callbacks. Enhanced Input's `Completed` event is not guaranteed to fire on every key-up transition (overlapping opposite-key presses, focus loss during key-up, etc.); when it doesn't, the axis's control value is never reset and stays latched at whatever the last `Triggered` call set it to — the drone gets stuck mid-maneuver on that axis with no way to recover, since nothing else ever writes to it. Polling raw key state fresh every tick is self-healing: it can't latch because it never depends on an event being delivered.
+
+Yaw and Pitch still use the Enhanced Input `Triggered`/`Completed` pattern (`IA_Yaw`, `IA_PitchRoll`) and have not shown this symptom. If they ever do, apply the same fix: read the bound physical keys directly via `IsInputKeyDown` in `Tick` instead of trusting the `Completed` event.
+
 ## Input pipeline
 
 ```

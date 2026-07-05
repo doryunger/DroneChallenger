@@ -55,7 +55,19 @@
   .tab-btn:hover  { color: #a6adc8; }
   .tab-btn.active { color: #89b4fa; border-bottom-color: #89b4fa; }
 
-  #graph { flex: 1; min-height: 0; overflow: hidden; }
+  #graph { flex: 1; min-height: 0; overflow: hidden; position: relative; }
+
+  #graph-loading {
+    position: absolute; inset: 0; z-index: 40;
+    display: flex; align-items: center; justify-content: center;
+    background: #13141f;
+  }
+  #graph-loading .spin {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 3px solid #313244; border-top-color: #89b4fa;
+    animation: graph-loading-spin 0.8s linear infinite;
+  }
+  @keyframes graph-loading-spin { to { transform: rotate(360deg); } }
 
   #debug-panel {
     position: fixed; bottom: 14px; left: 14px; z-index: 30;
@@ -118,7 +130,9 @@
   </div>
 </div>
 
-<div id="graph"></div>
+<div id="graph">
+  <div id="graph-loading"><div class="spin"></div></div>
+</div>
 
 <div id="debug-panel">
   <button id="debug-toggle" onclick="toggleDebug()">debug</button>

@@ -25,6 +25,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "DroneActor.h"
+#include "WorldPartition/WorldPartitionSubsystem.h"
 
 THIRD_PARTY_INCLUDES_START
 #include "bt/BehaviorTree.h"
@@ -55,20 +56,25 @@ ATargetPawn::ATargetPawn()
 			Mesh->SetMaterial(0, MatFinder.Object);
 	}
 
-	auto MakeWheel = [&](const TCHAR* Name, const TCHAR* AssetPath) -> UStaticMeshComponent*
+	auto MakeWheelComp = [&](const TCHAR* Name) -> UStaticMeshComponent*
 	{
 		UStaticMeshComponent* W = CreateDefaultSubobject<UStaticMeshComponent>(Name);
 		W->SetupAttachment(Mesh);
 		W->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		static ConstructorHelpers::FObjectFinder<UStaticMesh> Finder(AssetPath);
-		if (Finder.Succeeded()) W->SetStaticMesh(Finder.Object);
 		return W;
 	};
+	Wheel1 = MakeWheelComp(TEXT("Wheel1"));
+	Wheel2 = MakeWheelComp(TEXT("Wheel2"));
+	Wheel3 = MakeWheelComp(TEXT("Wheel3"));
+	Wheel4 = MakeWheelComp(TEXT("Wheel4"));
 
-	Wheel1 = MakeWheel(TEXT("Wheel1"), TEXT("/Game/PS1_Style_Hatchback_Car/meshes/SM_hatchback_car_wheel1"));
-	Wheel2 = MakeWheel(TEXT("Wheel2"), TEXT("/Game/PS1_Style_Hatchback_Car/meshes/SM_hatchback_car_wheel2"));
-	Wheel3 = MakeWheel(TEXT("Wheel3"), TEXT("/Game/PS1_Style_Hatchback_Car/meshes/SM_hatchback_car_wheel3"));
-	Wheel4 = MakeWheel(TEXT("Wheel4"), TEXT("/Game/PS1_Style_Hatchback_Car/meshes/SM_hatchback_car_wheel4"));
+	// Each finder must live in its own scope so the static is a distinct variable.
+	// A shared static inside a lambda would only initialise once (the first asset path),
+	// causing all four wheels to silently load wheel1's mesh.
+	{ static ConstructorHelpers::FObjectFinder<UStaticMesh> F(TEXT("/Game/PS1_Style_Hatchback_Car/meshes/SM_hatchback_car_wheel1")); if (F.Succeeded()) Wheel1->SetStaticMesh(F.Object); }
+	{ static ConstructorHelpers::FObjectFinder<UStaticMesh> F(TEXT("/Game/PS1_Style_Hatchback_Car/meshes/SM_hatchback_car_wheel2")); if (F.Succeeded()) Wheel2->SetStaticMesh(F.Object); }
+	{ static ConstructorHelpers::FObjectFinder<UStaticMesh> F(TEXT("/Game/PS1_Style_Hatchback_Car/meshes/SM_hatchback_car_wheel3")); if (F.Succeeded()) Wheel3->SetStaticMesh(F.Object); }
+	{ static ConstructorHelpers::FObjectFinder<UStaticMesh> F(TEXT("/Game/PS1_Style_Hatchback_Car/meshes/SM_hatchback_car_wheel4")); if (F.Succeeded()) Wheel4->SetStaticMesh(F.Object); }
 
 	Beacon = CreateDefaultSubobject<UPointLightComponent>(TEXT("Beacon"));
 	Beacon->SetupAttachment(Mesh);
@@ -313,7 +319,7 @@ void ATargetPawn::Tick(float DeltaTime)
 
 	if (!bPlacementDone || !Tree) return;
 
-	const ADroneGameMode* GM = GetWorld()->GetAuthGameMode<ADroneGameMode>();
+	ADroneGameMode* GM = GetWorld()->GetAuthGameMode<ADroneGameMode>();
 	const bool bGameEnded = GM && GM->IsGameEnded();
 
 	LastDeltaTime = DeltaTime;
@@ -332,6 +338,8 @@ void ATargetPawn::Tick(float DeltaTime)
 			if (bDroneInFOV) {
 				CurrentTrackingTime += DeltaTime;
 				BestTrackingTime = FMath::Max(BestTrackingTime, CurrentTrackingTime);
+				if (CurrentTrackingTime >= 30.f && GM)
+					GM->NotifyWin();
 			} else if (bWasInFOV) {
 				CurrentTrackingTime = 0.0f;
 			}
@@ -414,6 +422,8 @@ void ATargetPawn::BuildTree()
 		{
 			bIsCaptured = true;
 			OnCaptured.Broadcast(this);
+			if (ADroneGameMode* CaptureGM = GetWorld()->GetAuthGameMode<ADroneGameMode>())
+				CaptureGM->NotifyWin();
 		}
 		return bt::Status::SUCCESS;
 	};
@@ -633,15 +643,15 @@ bool ATargetPawn::ComputeDroneInFOV() const
 	return FVector::DotProduct(DroneFwd, DroneToCar) >= HalfFovCos;
 }
 
-void ATargetPawn::PlaceDroneNearCar(const FVector& CarPos, const FVector& CarForward)
+bool ATargetPawn::PlaceDroneNearCar(const FVector& CarPos, const FVector& CarForward)
 {
-	if (!IsValid(CachedDrone)) return;
+	if (!IsValid(CachedDrone)) return false;
 
 	FCollisionQueryParams IgnoreActors;
 	IgnoreActors.AddIgnoredActor(this);
 	IgnoreActors.AddIgnoredActor(CachedDrone);
 
-	static constexpr float SphereR      = 600.0f;
+	static constexpr float SphereR      = 900.0f;
 	static constexpr float SkyCheckDist = 2000.0f;
 
 	auto IsClear = [&](const FVector& P) -> bool
@@ -660,26 +670,39 @@ void ATargetPawn::PlaceDroneNearCar(const FVector& CarPos, const FVector& CarFor
 	static constexpr float Heights[]   = { 1500.f, 3000.f, 5000.f, 8000.f, 12000.f };
 	static constexpr float Distances[] = { 3000.f, 2000.f, 1000.f, 0.f };
 
-	FVector Best(CarPos.X, CarPos.Y, CarPos.Z + 15000.f);
+	const FVector CarRight = FVector::CrossProduct(FVector::UpVector, CarForward).GetSafeNormal();
+	const FVector Directions[] = { -CarForward, CarRight, -CarRight };
+
+	FVector Best = FVector::ZeroVector;
 	bool bPlaced = false;
 
 	for (float Height : Heights)
 	{
 		for (float Dist : Distances)
 		{
-			const FVector Candidate(
-				CarPos.X - CarForward.X * Dist,
-				CarPos.Y - CarForward.Y * Dist,
-				CarPos.Z + Height);
-
-			if (IsClear(Candidate))
+			for (const FVector& Dir : Directions)
 			{
-				Best    = Candidate;
-				bPlaced = true;
-				break;
+				const FVector Candidate = CarPos + Dir * Dist + FVector(0.f, 0.f, Height);
+
+				if (IsClear(Candidate))
+				{
+					Best    = Candidate;
+					bPlaced = true;
+					break;
+				}
+				if (Dist == 0.f) break;
 			}
+			if (bPlaced) break;
 		}
 		if (bPlaced) break;
+	}
+
+	if (!bPlaced)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("TargetPawn: no clear drone spot found near car (%.0f, %.0f, %.0f) — will retry"),
+			CarPos.X, CarPos.Y, CarPos.Z);
+		return false;
 	}
 
 	CachedDrone->SetActorLocation(Best, false, nullptr, ETeleportType::TeleportPhysics);
@@ -689,8 +712,8 @@ void ATargetPawn::PlaceDroneNearCar(const FVector& CarPos, const FVector& CarFor
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		PC->SetControlRotation(FaceRotator);
 
-	UE_LOG(LogTemp, Log, TEXT("TargetPawn: drone placed at (%.0f, %.0f, %.0f)%s"),
-		Best.X, Best.Y, Best.Z, bPlaced ? TEXT("") : TEXT(" [fallback — all candidates blocked]"));
+	UE_LOG(LogTemp, Log, TEXT("TargetPawn: drone placed at (%.0f, %.0f, %.0f)"), Best.X, Best.Y, Best.Z);
+	return true;
 }
 
 void ATargetPawn::WriteGraphDataJS()
@@ -734,14 +757,68 @@ void ATargetPawn::WriteGraphDataJS()
 	}
 }
 
+bool ATargetPawn::IsSceneStreamingReady()
+{
+	UWorld* World = GetWorld();
+	if (!World) return false;
+
+	if (UWorldPartitionSubsystem* WPS = World->GetSubsystem<UWorldPartitionSubsystem>())
+	{
+		if (!WPS->IsStreamingCompleted())
+			return false;
+	}
+
+	if (UClass* CesiumClass = FindObject<UClass>(nullptr, TEXT("/Script/CesiumRuntime.Cesium3DTileset")))
+	{
+		TArray<AActor*> Tilesets;
+		UGameplayStatics::GetAllActorsOfClass(World, CesiumClass, Tilesets);
+
+		if (Tilesets.IsEmpty())
+		{
+			PlacementTileProgress = -1.f;
+			PlacementStablePolls  = 0;
+			StreamingReadySeconds = 0.0;
+			return false;
+		}
+
+		float MinProgress = 100.f;
+		for (AActor* A : Tilesets)
+		{
+			if (UFunction* Fn = A->FindFunction(FName("GetLoadProgress")))
+			{
+				struct { float ReturnValue; } Params = {};
+				A->ProcessEvent(Fn, &Params);
+				MinProgress = FMath::Min(MinProgress, Params.ReturnValue);
+			}
+		}
+
+		if (FMath::IsNearlyEqual(MinProgress, PlacementTileProgress, 0.1f))
+			++PlacementStablePolls;
+		else
+		{
+			PlacementStablePolls  = 0;
+			PlacementTileProgress = MinProgress;
+			StreamingReadySeconds = 0.0;
+		}
+
+		if (PlacementStablePolls < RequiredPlacementStablePolls)
+			return false;
+	}
+
+	if (StreamingReadySeconds <= 0.0)
+		StreamingReadySeconds = FPlatformTime::Seconds();
+
+	return (FPlatformTime::Seconds() - StreamingReadySeconds) >= PostStreamingReadyBuffer;
+}
+
 void ATargetPawn::TryInitialPlacement()
 {
 	UWorld* World = GetWorld();
 	if (!World) return;
 
-	// Collect candidates within the current search radius, shuffled for variety.
-	// The drone stays at its editor position throughout — no aerial waiting view.
-	// Tiles are loaded here, so traces succeed immediately for nearby nodes.
+	if (!IsSceneStreamingReady())
+		return;
+
 	TArray<TPair<float, int32>> Candidates;
 	for (int32 NodeId : Graph.NodeIds)
 	{
@@ -786,19 +863,22 @@ void ATargetPawn::TryInitialPlacement()
 			continue;
 
 		const FVector CarPos(NodePos->X, NodePos->Y, Hit.ImpactPoint.Z + 50.0f);
-		SetActorLocation(CarPos);
 
-		CurrentPath   = Graph.GeneratePath(NodeId, 150000.0f);
-		PathNodeIndex = 0;
+		TArray<int32> Path = Graph.GeneratePath(NodeId, 150000.0f);
 
 		FVector CarForward = FVector::ForwardVector;
-		if (CurrentPath.Num() >= 2)
+		if (Path.Num() >= 2)
 		{
-			if (const FVector* NextPos = Graph.NodeWorldPos.Find(CurrentPath[1]))
+			if (const FVector* NextPos = Graph.NodeWorldPos.Find(Path[1]))
 				CarForward = FVector(NextPos->X - CarPos.X, NextPos->Y - CarPos.Y, 0.0f).GetSafeNormal();
 		}
 
-		PlaceDroneNearCar(CarPos, CarForward);
+		if (!PlaceDroneNearCar(CarPos, CarForward))
+			continue;
+
+		SetActorLocation(CarPos);
+		CurrentPath   = Path;
+		PathNodeIndex = 0;
 
 		AltitudeHistory.Empty();
 		AltitudeHistory.Add(CarPos.Z);
@@ -809,6 +889,8 @@ void ATargetPawn::TryInitialPlacement()
 		AltStabilitySamples.Empty();
 		World->GetTimerManager().SetTimer(
 			AltStabilityTimer, this, &ATargetPawn::CheckAltitudeStability, 0.5f, true);
+		World->GetTimerManager().SetTimer(
+			PostPlacementRecheckTimer, this, &ATargetPawn::RevalidateDronePlacement, PostPlacementRecheckDelay, false);
 		bPlacementDone = true;
 
 		UE_LOG(LogTemp, Log,
@@ -821,6 +903,26 @@ void ATargetPawn::TryInitialPlacement()
 	UE_LOG(LogTemp, Log,
 		TEXT("TargetPawn: %d candidates all missed — tiles still loading, radius now %.0f cm"),
 		NumToTry, PlacementRadius);
+}
+
+void ATargetPawn::RevalidateDronePlacement()
+{
+	if (!IsValid(CachedDrone)) return;
+
+	FCollisionQueryParams IgnoreActors;
+	IgnoreActors.AddIgnoredActor(this);
+	IgnoreActors.AddIgnoredActor(CachedDrone);
+
+	static constexpr float RevalidateSphereR = 900.0f;
+	const bool bBlocked = GetWorld()->OverlapAnyTestByChannel(
+		CachedDrone->GetActorLocation(), FQuat::Identity, ECC_WorldStatic,
+		FCollisionShape::MakeSphere(RevalidateSphereR), IgnoreActors);
+
+	if (!bBlocked) return;
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("TargetPawn: drone position now blocked by newly-streamed geometry — repositioning"));
+	PlaceDroneNearCar(GetActorLocation(), GetActorForwardVector());
 }
 
 bool ATargetPawn::ShouldAcceptAltitude(float CandidateZ)

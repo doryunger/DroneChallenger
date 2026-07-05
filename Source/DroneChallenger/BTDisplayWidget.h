@@ -5,7 +5,9 @@
 #include "Rendering/DrawElements.h"
 #include "BTDisplayWidget.generated.h"
 
+class UBorder;
 class UButton;
+class UWebBrowser;
 
 UCLASS()
 class DRONECHALLENGER_API UBTDisplayWidget : public UUserWidget
@@ -28,11 +30,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "BT")
 	void TogglePanel();
 
-	UFUNCTION(BlueprintCallable, Category = "BT")
-	void NotifyContentReady();
+	void NotifyLoadingDismissed();
 
 protected:
 	UFUNCTION() void HandleConsoleMessage(const FString& Message, const FString& Source, int32 Line);
+	virtual bool Initialize() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,
@@ -40,8 +42,28 @@ protected:
 		int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 
 private:
-	float StripePhase    = 0.f;
-	float LoadingElapsed = 0.f;
-	bool  bContentReady  = false;
-	mutable UButton* CachedBtn = nullptr;
+	static constexpr float MaxPanelOpenWait  = 15.f;
+	static constexpr float ButtonRevealDelay = 5.f;
+
+	float LoadingPhase  = 0.f;
+	float StripePhase   = 0.f;
+	bool  bURLLoaded    = false;
+	bool  bPageLoaded   = false;
+	int32 PanelOpenPolls = 0;
+	mutable UBorder*     CachedPanel   = nullptr;
+	mutable UButton*     CachedBtn     = nullptr;
+	mutable UWebBrowser* CachedBrowser = nullptr;
+	mutable UWidget*     CachedSpinner = nullptr;
+
+	mutable FVector2D CachedPanelPos  = FVector2D::ZeroVector;
+	mutable FVector2D CachedPanelSize = FVector2D::ZeroVector;
+
+	void RevealBrowserPage();
+	void RevealToggleButton();
+	void OnAfterConstruct();
+	void ReloadBrowser();
+	void OnPanelOpenTimer();
+
+	FTimerHandle PanelOpenTimerHandle;
+	FTimerHandle ButtonRevealHandle;
 };

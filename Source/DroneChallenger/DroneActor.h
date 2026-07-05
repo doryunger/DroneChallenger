@@ -133,8 +133,6 @@ private:
 	void RegisterInputMappingContext(AController* InController);
 	void NotifyCrash();
 
-	void OnThrottle(const FInputActionValue& Value);
-	void OnThrottleCompleted(const FInputActionValue& Value);
 	void OnPitchRoll(const FInputActionValue& Value);
 	void OnPitchRollCompleted(const FInputActionValue& Value);
 	void OnYaw(const FInputActionValue& Value);

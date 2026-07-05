@@ -12,10 +12,12 @@ class DRONECHALLENGER_API ADroneGameMode : public AGameModeBase
 public:
     ADroneGameMode();
 
+    void StartChaseTimer();
     void NotifyCrash();
     void NotifyWin();
 
-    [[nodiscard]] bool IsGameEnded() const { return bGameEnded; }
+    [[nodiscard]] bool  IsGameEnded()    const { return bGameEnded; }
+    [[nodiscard]] float GetRemainingTime() const;
 
     FOnGameEnded OnGameEnded;
 
