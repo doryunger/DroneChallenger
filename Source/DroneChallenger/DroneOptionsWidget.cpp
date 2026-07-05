@@ -55,7 +55,7 @@ static const FLinearColor kOGradient[7] = {
     FLinearColor(0.36f, 0.12f, 0.00f),
 };
 
-static void SlateBox(const FGeometry& Geom, FSlateWindowElementList& Out, int32 Layer,
+static void SlateBox_Opt(const FGeometry& Geom, FSlateWindowElementList& Out, int32 Layer,
     float X, float Y, float W, float H, const FLinearColor& Col)
 {
     FSlateDrawElement::MakeBox(Out, Layer,
@@ -86,7 +86,7 @@ void UDroneOptionsWidget::DrawPixelWord(
                 Col.A = Alpha;
                 for (int32 col = 0; col < 5; ++col)
                     if (G->Rows[row] & (1u << (4 - col)))
-                        SlateBox(Geom, Out, Layer, CurX + col * PW, TopY + row * PW, PW, PW, Col);
+                        SlateBox_Opt(Geom, Out, Layer, CurX + col * PW, TopY + row * PW, PW, PW, Col);
             }
         }
         CurX += 6.f * PW;
@@ -233,7 +233,7 @@ int32 UDroneOptionsWidget::NativePaint(
     const float S = FMath::Min(W, H);
 
     // dim overlay
-    SlateBox(AllottedGeometry, OutDrawElements, LayerId,
+    SlateBox_Opt(AllottedGeometry, OutDrawElements, LayerId,
         0.f, 0.f, W, H, FLinearColor(0.f, 0.f, 0.f, FadeAlpha * 0.72f));
     ++LayerId;
 
@@ -244,15 +244,15 @@ int32 UDroneOptionsWidget::NativePaint(
     const float DY  = (H - DH) * 0.5f;
     const float Bdr = FMath::Max(2.f, S * 0.0038f);
 
-    SlateBox(AllottedGeometry, OutDrawElements, LayerId, DX, DY, DW, DH,
+    SlateBox_Opt(AllottedGeometry, OutDrawElements, LayerId, DX, DY, DW, DH,
         FLinearColor(0.00f, 0.00f, 0.06f, 0.99f * FadeAlpha));
     ++LayerId;
 
     const FLinearColor GoldBdr(0.70f, 0.42f, 0.02f, FadeAlpha);
-    SlateBox(AllottedGeometry, OutDrawElements, LayerId, DX,             DY,             DW,  Bdr, GoldBdr);
-    SlateBox(AllottedGeometry, OutDrawElements, LayerId, DX,             DY + DH - Bdr,  DW,  Bdr, GoldBdr);
-    SlateBox(AllottedGeometry, OutDrawElements, LayerId, DX,             DY,              Bdr, DH,  GoldBdr);
-    SlateBox(AllottedGeometry, OutDrawElements, LayerId, DX + DW - Bdr,  DY,              Bdr, DH,  GoldBdr);
+    SlateBox_Opt(AllottedGeometry, OutDrawElements, LayerId, DX,             DY,             DW,  Bdr, GoldBdr);
+    SlateBox_Opt(AllottedGeometry, OutDrawElements, LayerId, DX,             DY + DH - Bdr,  DW,  Bdr, GoldBdr);
+    SlateBox_Opt(AllottedGeometry, OutDrawElements, LayerId, DX,             DY,              Bdr, DH,  GoldBdr);
+    SlateBox_Opt(AllottedGeometry, OutDrawElements, LayerId, DX + DW - Bdr,  DY,              Bdr, DH,  GoldBdr);
     ++LayerId;
 
     // title
@@ -266,7 +266,7 @@ int32 UDroneOptionsWidget::NativePaint(
 
     // divider
     const float DivY = TitleY + TitleH + TitlePW * 2.f;
-    SlateBox(AllottedGeometry, OutDrawElements, LayerId,
+    SlateBox_Opt(AllottedGeometry, OutDrawElements, LayerId,
         DX + Bdr, DivY, DW - Bdr * 2.f, FMath::Max(1.f, S * 0.0018f),
         FLinearColor(0.52f, 0.30f, 0.01f, FadeAlpha * 0.65f));
     ++LayerId;
@@ -314,15 +314,15 @@ int32 UDroneOptionsWidget::NativePaint(
     {
         const float RW = Max.X - Min.X;
         const float RH = Max.Y - Min.Y;
-        SlateBox(AllottedGeometry, OutDrawElements, LayerId,
+        SlateBox_Opt(AllottedGeometry, OutDrawElements, LayerId,
             Min.X, Min.Y, RW, RH,
             FLinearColor(0.04f, 0.07f, 0.22f, FadeAlpha * 0.88f));
         const float B   = FMath::Max(1.f, Bdr * 0.5f);
         const FLinearColor HC(0.90f, 0.72f, 0.20f, FadeAlpha);
-        SlateBox(AllottedGeometry, OutDrawElements, LayerId, Min.X,     Min.Y,     RW, B,  HC);
-        SlateBox(AllottedGeometry, OutDrawElements, LayerId, Min.X,     Max.Y - B, RW, B,  HC);
-        SlateBox(AllottedGeometry, OutDrawElements, LayerId, Min.X,     Min.Y,     B,  RH, HC);
-        SlateBox(AllottedGeometry, OutDrawElements, LayerId, Max.X - B, Min.Y,     B,  RH, HC);
+        SlateBox_Opt(AllottedGeometry, OutDrawElements, LayerId, Min.X,     Min.Y,     RW, B,  HC);
+        SlateBox_Opt(AllottedGeometry, OutDrawElements, LayerId, Min.X,     Max.Y - B, RW, B,  HC);
+        SlateBox_Opt(AllottedGeometry, OutDrawElements, LayerId, Min.X,     Min.Y,     B,  RH, HC);
+        SlateBox_Opt(AllottedGeometry, OutDrawElements, LayerId, Max.X - B, Min.Y,     B,  RH, HC);
     };
 
     if (bMenuHovered) DrawHoverRect(MenuMin, MenuMax);

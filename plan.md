@@ -165,72 +165,34 @@ Prebuilt External UBT module (`Source/ThirdParty/ArboristLib/`). Single static l
 - **BT viewer loading spinner**: animated gold spinner on `UBTDisplayWidget` while `viewer.html` loads, dismissed by a `BT_VIEWER_READY` console sentinel (15s safety fallback).
 - **Minimap size** reduced and decoupled from its bottom margin; frame rate capped (`t.MaxFPS`).
 
-### Phase 10 — Cloud Deployment (Pixel Streaming on-demand)
+### Phase 10 — Cloud Deployment (Vagon Streaming) ✅
 
-**Goal**: a recruiter clicks a URL, waits ~3–4 minutes, and plays the game live in their browser — no install.
+**Goal**: showcase the simulator on-demand via Vagon's cloud streaming platform — no install required for the viewer, no infrastructure to manage.
 
-**Steps**
-1. Enable **Pixel Streaming plugin** in the project (`Edit → Plugins → Pixel Streaming`), rebuild
-2. Repackage (Shipping) with Pixel Streaming active — the plugin must be baked in
-3. Stand up cloud infrastructure (see below)
-4. Deploy the packaged build to the instance; configure auto-launch on boot with flags:
-   ```
-   DroneChallenger.exe -PixelStreamingIP=0.0.0.0 -PixelStreamingPort=8888 -AudioMixer -RenderOffScreen
-   ```
-5. Portfolio page with wake UI + WebRTC embed
+**Why Vagon instead of Pixel Streaming / AWS**
+The Pixel Streaming approach was replaced because it requires maintaining AWS infrastructure (signaling server, TURN server, EC2 instance, Lambda wake controller). Vagon provides the entire streaming stack out of the box and integrates directly with UE5 packaged builds.
 
-**Infrastructure**
+**What was done**
 
-```
-Portfolio page (static, Vercel/Netlify — free)
-       │
-       ▼
-Wake Controller (AWS Lambda + API Gateway — free tier)
-       │
-       ├─ instance running? ──► return stream URL
-       └─ instance stopped? ──► call EC2 start_instances(), return "warming"
-              │
-              ▼
-GPU Instance (AWS g4dn.xlarge, stopped when idle)
-  ├── Epic Pixel Streaming Infrastructure (signaling server, TURN server)
-  └── DroneChallenger.exe (auto-launches with Pixel Streaming flags on boot)
-```
+- **Build config** — `DefaultGame.ini` switched to `BuildConfiguration=PPBC_Shipping`
+- **Cook coverage** — `DirectoriesToAlwaysCook=(Path="/Game")` ensures the entire Content directory is cooked, including Blueprint assets (`BP_CarDisplay`) referenced only by string at runtime
+- **Correct executable** — Vagon must be pointed at `DroneChallenger.exe` (root launcher), not `Binaries/Win64/DroneChallenger-Win64-Shipping.exe`. The root launcher sets the correct working directory so `FPaths::ProjectContentDir()` resolves properly
+- **Machine type** — Must use an **RTX-capable tier** (G2 or G3). The project enables `r.RayTracing=True` and `r.Lumen.HardwareRayTracing=True`, which require DXR hardware support. The Tesla T4 (OptiX & CUDA tier) does not support DXR and causes rendering failures including broken SceneCapture output
+- **BP_CarDisplay spawning** — `ADroneMainMenuHUD::BeginPlay()` now spawns `BP_CarDisplay` (car mesh + SceneCapture2D) at `Z = -100000` (underground) before creating the menu widget. Underground spawn keeps the mesh out of the main camera view while the SceneCapture child component still captures the car correctly (child transforms are relative to the actor)
+- **RT resource clearing fixed** — `DroneMainMenuWidget::NativeConstruct` previously called `RT->UpdateResource()` on both `RT_CarPreview` and `RT_DronePreview`, which recreates the GPU texture from scratch and discards SceneCapture content. Both calls removed; the widget only loads the asset reference and reads from it via the material
+- **Loading screen gating — Cesium tiles** — `ADroneHUD::PollTileStreaming()` now checks Cesium tile load progress via the UE5 reflection API (`FindObject<UClass>` + `ProcessEvent("GetLoadProgress")`), avoiding `#include "Cesium3DTileset.h"` which triggers Windows min/max macro conflicts. Loading screen is held until every `ACesium3DTileset` actor in the level reports `GetLoadProgress() == 100`
+- **Input blocking during load** — `ADroneHUD` disables drone input (`CachedDrone->DisableInput`) in `BeginPlay` and re-enables it (`EnableInput`) only when all three readiness conditions are met. `ToggleOptions` (ESC) is also gated by `bLoadingActive`
 
-**Components to set up**
+**Cost model**
 
-| Component | What it is | Cost |
-|---|---|---|
-| Elastic IP | Fixed public IP so the wake controller always knows the address | ~$3.65/month while stopped, free while running |
-| AWS Lambda (×2) | `POST /wake` — starts instance; `GET /status` — checks readiness | Free tier |
-| g4dn.xlarge | GPU instance; NVIDIA T4; runs the game + signaling server | ~$0.53/hr, only when running |
-| Auto-shutdown watchdog | Script on the instance: stop after 15 min of no WebRTC connections | $0 |
+| Cost | Amount |
+|---|---|
+| Base (storage/availability) | $0.67/day → ~$20/month |
+| Per session (10-min cap) | ~$0.42/session |
+| Example: 1 session/day | ~$33/month total |
 
-**Instance startup sequence (auto, on boot)**
-1. Windows boots
-2. Startup task runs Epic signaling server (`node cirrus.js`)
-3. Startup task launches `DroneChallenger.exe` with Pixel Streaming flags
-4. Lambda `/status` polls `http://[elastic-ip]:80/` — returns `ready` when signaling server responds
-
-**User experience**
-```
-[Launch DroneChallenger]  ← button on portfolio page
-         │
-         ▼
-"Starting GPU session... (~3 minutes)"
-[████████░░░░░░░░░░░░]  ← frontend polls /status every 5 s
-         │  (signaling server responds)
-         ▼
-"Session ready. Connecting..."
-         │
-         ▼
-Pixel Stream in the same browser tab
-```
-
-**Session limits**
-- Max session: 20 minutes (watchdog stops the instance)
-- If no connection after 5 minutes of starting: auto-stop (failed launch guard)
-
-**Estimated cost for portfolio use**: ~5 recruiter sessions × 20 min = ~$1/month in GPU time + ~$3.65/month Elastic IP = **under $5/month total**.
+**Remaining**
+- Validate the full build on Vagon (G2 or G3 tier) — confirm BP car display, loading screen timing, and input blocking all behave correctly
 
 ---
 
@@ -238,14 +200,7 @@ Pixel Stream in the same browser tab
 
 | Item | Phase | Status |
 |---|---|---|
-| Bundle non-asset runtime files (HUD, Graph, BT) in packaging settings | 9 | Not started |
-| Windows 64-bit shipping build | 9 | Not started |
-| Smoke test packaged build locally | 9 | Not started |
-| Enable Pixel Streaming plugin + repackage | 10 | Not started |
-| AWS infrastructure (Lambda, Elastic IP, g4dn) | 10 | Not started |
-| Epic Pixel Streaming Infrastructure on instance | 10 | Not started |
-| Auto-shutdown watchdog script | 10 | Not started |
-| Portfolio page with wake UI + status polling | 10 | Not started |
+| Validate Vagon deployment on G2 or G3 tier (car display, loading screen, input blocking) | 10 | In progress |
 
 ---
 

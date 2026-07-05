@@ -5,7 +5,16 @@ ADroneGameMode::ADroneGameMode() {}
 void ADroneGameMode::BeginPlay()
 {
     Super::BeginPlay();
-    GetWorldTimerManager().SetTimer(TimeoutHandle, this, &ADroneGameMode::OnTimeout, 15.f * 60.f, false);
+}
+
+void ADroneGameMode::StartChaseTimer()
+{
+    GetWorldTimerManager().SetTimer(TimeoutHandle, this, &ADroneGameMode::OnTimeout, 10.f * 60.f, false);
+}
+
+float ADroneGameMode::GetRemainingTime() const
+{
+    return GetWorldTimerManager().GetTimerRemaining(TimeoutHandle);
 }
 
 void ADroneGameMode::NotifyCrash()

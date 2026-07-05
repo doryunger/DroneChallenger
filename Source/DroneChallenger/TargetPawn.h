@@ -47,10 +47,10 @@ public:
 	float DetectionFovDeg = 90.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Target|Detection")
-	float CaptureRadius = 100.0f;
+	float CaptureRadius = 300.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Target|Detection")
-	float CaptureRequiredTime = 2.0f;
+	float CaptureRequiredTime = 3.0f;
 
 	FOnTargetCaptured OnCaptured;
 	FOnAltitudeStable OnAltitudeStable;
@@ -126,8 +126,10 @@ private:
 	bool ComputeDroneInFOV() const;
 	void AdvanceAlongPath();
 	void AdvanceAlongGraph();
-	void PlaceDroneNearCar(const FVector& CarPos, const FVector& CarForward);
+	bool PlaceDroneNearCar(const FVector& CarPos, const FVector& CarForward);
 	void TryInitialPlacement();
+	bool IsSceneStreamingReady();
+	void RevalidateDronePlacement();
 	void PeriodicTerrainSnap();
 	bool ShouldAcceptAltitude(float CandidateZ);
 	void CheckAltitudeStability();
@@ -136,6 +138,13 @@ private:
 	FVector      DroneEditorPos;
 	float        PlacementRadius    = 20000.0f;
 	bool         bPlacementDone     = false;
+
+	float  PlacementTileProgress = -1.f;
+	int32  PlacementStablePolls  = 0;
+	static constexpr int32 RequiredPlacementStablePolls = 6;
+	static constexpr float PostPlacementRecheckDelay = 5.0f;
+	static constexpr float PostStreamingReadyBuffer = 8.0f;
+	double StreamingReadySeconds = 0.0;
 
 	TArray<float> AltitudeHistory;
 	TArray<float> AltStabilitySamples;
@@ -147,4 +156,5 @@ private:
 	FTimerHandle TerrainSnapTimer;
 	FTimerHandle HUDServerRetryTimer;
 	FTimerHandle AltStabilityTimer;
+	FTimerHandle PostPlacementRecheckTimer;
 };

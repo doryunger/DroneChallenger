@@ -62,9 +62,13 @@ int32 UDronePFDWidget::NativePaint(
 	const float W = Size.X;
 	const float H = Size.Y;
 
-	const float R        = FMath::Min(W * 0.1024f, H * 0.165f);
+	// Scale up gently for ultrawide aspect ratios so the PFD fills the same
+	// visual fraction of the screen as it does on 16:9.
+	const float BaseR    = FMath::Min(W * 0.0627f, H * 0.1010f);
+	const float ARBoost  = FMath::Sqrt(FMath::Max(1.f, (W / H) / (16.f / 9.f)));
+	const float R        = BaseR * ARBoost;
 	const float CX       = W * 0.5f;
-	const float CY       = H - R - H * 0.03f;
+	const float CY       = H - R - H * 0.02f;
 	const float LabelH   = R * 0.17f;
 	const float StripW   = R * 0.50f;
 	const float StripGap = R * 0.24f;

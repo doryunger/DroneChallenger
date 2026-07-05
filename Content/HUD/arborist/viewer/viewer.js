@@ -37,6 +37,20 @@ let isLive       = true;
 let isPlaying    = false;
 let playTimer    = null;
 
+let pollIntervalMs = 3000;
+let pollTimer      = null;
+
+function restartPollTimer() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(pollHistory, pollIntervalMs);
+}
+
+window.setPollRate = function(ms) {
+  if (ms === pollIntervalMs) return;
+  pollIntervalMs = ms;
+  restartPollTimer();
+};
+
 function makeTooltip(name, type, status) {
   const sc  = STATUS_COLOR[status];
   const col = sc ? sc.font : '#6c7086';
@@ -85,6 +99,8 @@ function buildGraph(node, nodes, edges, parentUid) {
   (node.children || []).forEach(c => buildGraph(c, nodes, edges, uid));
 }
 
+const TEMP_DEBUG_GRAPH_DRAW_DELAY_MS = 3000;
+
 async function loadTree() {
   try {
     const res  = await fetch('http://127.0.0.1:8081/tree');
@@ -94,6 +110,9 @@ async function loadTree() {
       console.warn('[BT] /tree not ready yet');
       return;
     }
+
+    if (TEMP_DEBUG_GRAPH_DRAW_DELAY_MS > 0)
+      await new Promise(r => setTimeout(r, TEMP_DEBUG_GRAPH_DRAW_DELAY_MS));
 
     nodeCounter  = 0;
     rootUid      = null; edgeNodesMap = {}; parentOf = {}; childrenOf = {};
@@ -147,6 +166,8 @@ async function loadTree() {
       console.log('[BT] afterDrawing — nodes:', ids.length,
         ids.length ? 'first pos: ' + JSON.stringify(pos[ids[0]]) : '');
       network.fit({ animation: false });
+      const loadingEl = document.getElementById('graph-loading');
+      if (loadingEl) loadingEl.style.display = 'none';
       console.log('BT_VIEWER_READY');
     });
 
@@ -388,8 +409,9 @@ document.getElementById('scrubber').addEventListener('input', e => {
   seek(parseInt(e.target.value, 10));
 });
 
+console.log('VIEWER_PAGE_LOADED');
 loadTree();
-setInterval(pollHistory, 500);
+restartPollTimer();
 
 function dbgLine(text, cls) {
   const d = document.createElement('div');
