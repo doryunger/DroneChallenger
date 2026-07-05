@@ -78,6 +78,55 @@ bool FDroneGraph::Load(const FString& NodesPath, const FString& EdgesPath,
 		}
 	}
 
+	{
+		TSet<int32> Largest;
+		TSet<int32> Seen;
+		for (int32 Node : NodeIds)
+		{
+			if (Seen.Contains(Node)) continue;
+
+			TSet<int32>   Component;
+			TArray<int32> Queue;
+			Queue.Add(Node);
+			Seen.Add(Node);
+			Component.Add(Node);
+
+			int32 Head = 0;
+			while (Head < Queue.Num())
+			{
+				const int32 Cur = Queue[Head++];
+				if (const TArray<int32>* Neighbours = Adjacency.Find(Cur))
+				{
+					for (int32 N : *Neighbours)
+					{
+						if (!Seen.Contains(N))
+						{
+							Seen.Add(N);
+							Component.Add(N);
+							Queue.Add(N);
+						}
+					}
+				}
+			}
+
+			if (Component.Num() > Largest.Num())
+				Largest = MoveTemp(Component);
+		}
+
+		if (Largest.Num() < NodeIds.Num())
+		{
+			const int32 PrunedCount = NodeIds.Num() - Largest.Num();
+			NodeIds.RemoveAll([&Largest](int32 Id) { return !Largest.Contains(Id); });
+			for (auto It = NodeWorldPos.CreateIterator(); It; ++It)
+				if (!Largest.Contains(It->Key)) It.RemoveCurrent();
+			for (auto It = Adjacency.CreateIterator(); It; ++It)
+				if (!Largest.Contains(It->Key)) It.RemoveCurrent();
+
+			UE_LOG(LogTemp, Warning, TEXT("FDroneGraph: pruned %d node(s) in disconnected component(s), keeping the largest connected component (%d nodes)"),
+				PrunedCount, Largest.Num());
+		}
+	}
+
 	UE_LOG(LogTemp, Log, TEXT("FDroneGraph: loaded %d nodes, %d connected nodes, %d adjacency entries"),
 		NodeIds.Num(), Adjacency.Num(), [&]{ int32 t=0; for (auto& p : Adjacency) t+=p.Value.Num(); return t; }());
 
@@ -114,7 +163,14 @@ TArray<int32> FDroneGraph::GeneratePath(int32 StartNode, float TargetDistanceCm,
 		if (Candidates.IsEmpty())
 		{
 			if (Path.Num() <= 1)
+			{
+				if (PrevNode != INDEX_NONE && Neighbours->Contains(PrevNode) && NodeWorldPos.Contains(PrevNode))
+				{
+					Accumulated += FVector::Dist(NodeWorldPos[Current], NodeWorldPos[PrevNode]);
+					Path.Add(PrevNode);
+				}
 				break;
+			}
 			Path.RemoveAt(Path.Num() - 1);
 			continue;
 		}
