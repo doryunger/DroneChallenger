@@ -84,43 +84,68 @@ bool FDroneGraph::Load(const FString& NodesPath, const FString& EdgesPath,
 	return !NodeIds.IsEmpty();
 }
 
-TArray<int32> FDroneGraph::GeneratePath(int32 StartNode, float TargetDistanceCm, int32 PrevNode) const
+TArray<int32> FDroneGraph::GeneratePath(int32 StartNode, float TargetDistanceCm, int32 PrevNode,
+                                         const FVector* BiasTarget, int32 BiasSteps) const
 {
 	TArray<int32> Path;
 	if (!NodeWorldPos.Contains(StartNode)) return Path;
 
 	Path.Add(StartNode);
-	int32 Current     = StartNode;
-	int32 Prev        = PrevNode;
+	TSet<int32> Visited;
+	Visited.Add(StartNode);
+	if (PrevNode != INDEX_NONE)
+		Visited.Add(PrevNode);
+
 	float Accumulated = 0.0f;
+	int32 StepCount   = 0;
 
 	while (Accumulated < TargetDistanceCm)
 	{
-		const int32 Next = PickNextNode(Current, Prev);
-		if (Next == INDEX_NONE) break;
+		const int32 Current = Path.Last();
+		const TArray<int32>* Neighbours = Adjacency.Find(Current);
+		if (!Neighbours)
+			break;
+
+		TArray<int32> Candidates;
+		for (int32 N : *Neighbours)
+			if (!Visited.Contains(N))
+				Candidates.Add(N);
+
+		if (Candidates.IsEmpty())
+		{
+			if (Path.Num() <= 1)
+				break;
+			Path.RemoveAt(Path.Num() - 1);
+			continue;
+		}
+
+		int32 Next;
+		if (BiasTarget && StepCount < BiasSteps)
+		{
+			Next = Candidates[0];
+			float BestDistSq = FVector::DistSquared(NodeWorldPos[Next], *BiasTarget);
+			for (int32 i = 1; i < Candidates.Num(); ++i)
+			{
+				const float DistSq = FVector::DistSquared(NodeWorldPos[Candidates[i]], *BiasTarget);
+				if (DistSq < BestDistSq)
+				{
+					BestDistSq = DistSq;
+					Next       = Candidates[i];
+				}
+			}
+		}
+		else
+		{
+			Next = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
+		}
 
 		Accumulated += FVector::Dist(NodeWorldPos[Current], NodeWorldPos[Next]);
 		Path.Add(Next);
-		Prev    = Current;
-		Current = Next;
+		Visited.Add(Next);
+		++StepCount;
 	}
 
 	return Path;
-}
-
-int32 FDroneGraph::PickNextNode(int32 From, int32 CameFrom) const
-{
-	const TArray<int32>* Neighbours = Adjacency.Find(From);
-	if (!Neighbours || Neighbours->IsEmpty()) return INDEX_NONE;
-
-	TArray<int32> Candidates;
-	for (int32 N : *Neighbours)
-		if (N != CameFrom) Candidates.Add(N);
-
-	if (Candidates.IsEmpty())
-		return (CameFrom != INDEX_NONE) ? CameFrom : (*Neighbours)[0];
-
-	return Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
 }
 
 int32 FDroneGraph::FindNearestNode(const FVector& WorldPos) const
