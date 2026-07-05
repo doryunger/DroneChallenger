@@ -988,40 +988,6 @@ FDroneControlInput ATargetPawn::ComputeDemoSteering(const FVector& DronePos, con
 	return Input;
 }
 
-void ATargetPawn::RecalculateDemoIntercept()
-{
-	const FVector CarPos = GetActorLocation();
-	if (CurrentPath.IsEmpty() || !IsValid(CachedDrone))
-	{
-		DemoInterceptPoint = CarPos;
-		return;
-	}
-
-	const FVector DronePos = CachedDrone->GetActorLocation();
-
-	float AccumCarDist = 0.0f;
-	FVector PrevPos = CarPos;
-	for (int32 i = PathNodeIndex + 1; i < CurrentPath.Num(); ++i)
-	{
-		const FVector* NodePos = Graph.NodeWorldPos.Find(CurrentPath[i]);
-		if (!NodePos) continue;
-
-		AccumCarDist += FVector::Dist(PrevPos, *NodePos);
-		PrevPos = *NodePos;
-
-		const float CarEta   = AccumCarDist / FMath::Max(1.0f, CurrentSpeed);
-		const float DroneEta = FVector::Dist(DronePos, *NodePos) / DemoDroneCruiseSpeedCms;
-
-		if (DroneEta <= CarEta)
-		{
-			DemoInterceptPoint = *NodePos;
-			return;
-		}
-	}
-
-	DemoInterceptPoint = PrevPos;
-}
-
 void ATargetPawn::TickDemoAutopilot(float DeltaTime)
 {
 	if (!IsValid(CachedDrone))
@@ -1069,10 +1035,14 @@ void ATargetPawn::TickDemoAutopilot(float DeltaTime)
 			CorrectInput.Yaw = FMath::Clamp(YawError * YawGain, -1.0f, 1.0f);
 
 			if (FMath::Abs(YawError) < DemoCorrectYawToleranceDeg)
+			{
+				DemoWaypointIndex = FMath::Clamp(PathNodeIndex + 1, 0, FMath::Max(0, CurrentPath.Num() - 1));
 				DemoPhase = EDemoPhase::Chase;
+			}
 		}
 		else
 		{
+			DemoWaypointIndex = FMath::Clamp(PathNodeIndex + 1, 0, FMath::Max(0, CurrentPath.Num() - 1));
 			DemoPhase = EDemoPhase::Chase;
 		}
 
@@ -1081,19 +1051,32 @@ void ATargetPawn::TickDemoAutopilot(float DeltaTime)
 	}
 	case EDemoPhase::Chase:
 	{
-		DemoInterceptRecalcTimer -= DeltaTime;
-		if (DemoInterceptRecalcTimer <= 0.0f)
+		const FVector CarPos = GetActorLocation();
+
+		FVector TargetXY = CarPos;
+		if (!CurrentPath.IsEmpty())
 		{
-			RecalculateDemoIntercept();
-			DemoInterceptRecalcTimer = DemoInterceptRecalcInterval;
+			DemoWaypointIndex = FMath::Clamp(DemoWaypointIndex, 0, CurrentPath.Num() - 1);
+
+			const FVector* WaypointPos = Graph.NodeWorldPos.Find(CurrentPath[DemoWaypointIndex]);
+			if (WaypointPos)
+			{
+				TargetXY = *WaypointPos;
+
+				if (DemoWaypointIndex < CurrentPath.Num() - 1 &&
+				    FVector::Dist2D(DronePos, *WaypointPos) < DemoWaypointArriveDistCm)
+				{
+					++DemoWaypointIndex;
+				}
+			}
 		}
 
-		const float DistToIntercept   = FVector::Dist2D(DronePos, DemoInterceptPoint);
-		const float GlideT            = FMath::Clamp(DistToIntercept / DemoChaseGlideStartDistCm, 0.0f, 1.0f);
+		const float DistToCar         = FVector::Dist2D(DronePos, CarPos);
+		const float GlideT            = FMath::Clamp(DistToCar / DemoChaseGlideStartDistCm, 0.0f, 1.0f);
 		const float TargetAltAboveCar = FMath::Lerp(DemoChaseLowAltAboveCarCm, DemoChaseHighAltAboveCarCm, GlideT);
-		const float TargetZ           = GetActorLocation().Z + TargetAltAboveCar;
+		const float TargetZ           = CarPos.Z + TargetAltAboveCar;
 
-		CachedDrone->SetAutopilotInput(ComputeDemoSteering(DronePos, DemoInterceptPoint, TargetZ));
+		CachedDrone->SetAutopilotInput(ComputeDemoSteering(DronePos, TargetXY, TargetZ));
 		break;
 	}
 	default:

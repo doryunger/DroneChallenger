@@ -144,23 +144,20 @@ private:
 
 	bool       bDemoModeRequested          = false;
 	EDemoPhase DemoPhase                  = EDemoPhase::Inactive;
-	FVector    DemoInterceptPoint         = FVector::ZeroVector;
-	float      DemoInterceptRecalcTimer   = 0.0f;
 	float      DemoClimbTargetZ           = 0.0f;
 	float      DemoSpinStartYaw           = 0.0f;
+	int32      DemoWaypointIndex          = 0;
 
-	static constexpr float DemoClimbHeightCm          = 6000.0f;
+	static constexpr float DemoClimbHeightCm          = 3000.0f;
 	static constexpr float DemoSpinTotalDeltaDeg      = 180.0f;
 	static constexpr float DemoSpinYawInput           = 0.4f;
 	static constexpr float DemoCorrectYawToleranceDeg = 5.0f;
 	static constexpr float DemoChaseHighAltAboveCarCm = 8000.0f;
 	static constexpr float DemoChaseLowAltAboveCarCm  = 250.0f;
 	static constexpr float DemoChaseGlideStartDistCm  = 30000.0f;
-	static constexpr float DemoDroneCruiseSpeedCms    = 1400.0f;
-	static constexpr float DemoInterceptRecalcInterval = 1.0f;
+	static constexpr float DemoWaypointArriveDistCm   = 500.0f;
 
 	void TickDemoAutopilot(float DeltaTime);
-	void RecalculateDemoIntercept();
 	FDroneControlInput ComputeDemoSteering(const FVector& DronePos, const FVector& TargetXY, float TargetZ) const;
 	bool ComputeYawErrorToTarget(const FVector& DronePos, const FVector& TargetXY, float& OutYawError) const;
 
