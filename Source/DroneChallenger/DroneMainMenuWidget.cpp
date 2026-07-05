@@ -36,6 +36,7 @@ static const FPixelGlyph GlyphS = {{ 14, 17, 16, 14,  1, 17, 14 }};
 static const FPixelGlyph GlyphT = {{ 31,  4,  4,  4,  4,  4,  4 }};
 static const FPixelGlyph GlyphU = {{ 17, 17, 17, 17, 17, 17, 14 }};
 static const FPixelGlyph GlyphY = {{ 17, 17, 10,  4,  4,  4,  4 }};
+static const FPixelGlyph GlyphApostrophe = {{ 2, 4, 0, 0, 0, 0, 0 }};
 
 static const FPixelGlyph* GetPixelGlyph(TCHAR C)
 {
@@ -61,6 +62,7 @@ static const FPixelGlyph* GetPixelGlyph(TCHAR C)
     case 'T': return &GlyphT;
     case 'U': return &GlyphU;
     case 'Y': return &GlyphY;
+    case '\'': return &GlyphApostrophe;
     default:  return nullptr;
     }
 }
@@ -446,7 +448,7 @@ void UDroneMainMenuWidget::DrawBTInfoScreen(
     SlateBox_MM(Geom, Out, Layer, BtnX + BtnW - Bdr, BtnY,               Bdr,  BtnH, BtnBdr);
     ++Layer;
 
-    const FString BtnLabel = TEXT("LETS GO");
+    const FString BtnLabel = TEXT("LET'S GO");
     const float BtnPW  = FMath::Max(2.f, FMath::Floor(BtnW * 0.72f / 47.f));
     const float BLW    = PixelWordWidth(BtnLabel, BtnPW);
     const float BLH    = 7.f * BtnPW;
