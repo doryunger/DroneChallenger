@@ -386,8 +386,6 @@ void UDroneMainMenuWidget::DrawBTInfoScreen(
         TEXT("Switch between Active Branch (just the current path)"),
         TEXT("and Full Tree (the whole decision structure)."),
         TEXT(""),
-        TEXT("Open it anytime from the small button in the"),
-        TEXT("corner of the screen during the mission."),
     };
 
     const float TextStartY = DivY + DH * 0.05f;
