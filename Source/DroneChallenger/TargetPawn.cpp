@@ -13,8 +13,6 @@
 #endif
 #include "CesiumGlobeAnchorComponent.h"
 #include "CesiumGeoreference.h"
-#include "CesiumCameraManager.h"
-#include "CesiumCamera.h"
 #include "Components/StaticMeshComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Components/PointLightComponent.h"
@@ -160,33 +158,6 @@ void ATargetPawn::BeginPlay()
 
 			GetWorldTimerManager().SetTimer(
 				PlacementTimer, this, &ATargetPawn::TryInitialPlacement, 1.0f, true);
-
-			if (bDemoModeRequested)
-			{
-				if (ACesiumCameraManager* CamMgr = ACesiumCameraManager::GetDefaultCameraManager(this))
-				{
-					auto MakeDownwardCamera = [](const FVector& Pos)
-					{
-						FCesiumCamera Cam;
-						Cam.ParameterSource   = ECameraParameterSource::Manual;
-						Cam.ViewportSize      = FVector2D(1920.0, 1080.0);
-						Cam.Location          = FVector(Pos.X, Pos.Y, Pos.Z + 500000.0);
-						Cam.Rotation          = FRotator(-90.0, 0.0, 0.0);
-						Cam.FieldOfViewDegrees = 90.0;
-						return Cam;
-					};
-
-					const FVector AnchorApprox = Georef->TransformLongitudeLatitudeHeightPositionToUnreal(
-						FVector(11.5755, 48.1374, 1000.0));
-					CamMgr->AdditionalCameras.Add(MakeDownwardCamera(AnchorApprox));
-
-					if (const FVector* CarNodePos = Graph.NodeWorldPos.Find(DemoCarStartNodeId))
-						CamMgr->AdditionalCameras.Add(MakeDownwardCamera(*CarNodePos));
-
-					UE_LOG(LogTemp, Log,
-						TEXT("TargetPawn: DEMO MODE — registered additional Cesium cameras over anchor/car start to force tile streaming there"));
-				}
-			}
 
 			WriteGraphDataJS();
 
@@ -870,12 +841,6 @@ void ATargetPawn::TryInitialPlacement()
 	if (!IsSceneStreamingReady())
 		return;
 
-	if (bDemoModeRequested)
-	{
-		SetupDemoMode();
-		return;
-	}
-
 	TArray<TPair<float, int32>> Candidates;
 	for (int32 NodeId : Graph.NodeIds)
 	{
@@ -888,8 +853,15 @@ void ATargetPawn::TryInitialPlacement()
 			Candidates.Add({ Dist2D, NodeId });
 	}
 
-	for (int32 i = Candidates.Num() - 1; i > 0; --i)
-		Candidates.Swap(i, FMath::RandRange(0, i));
+	if (bDemoModeRequested)
+	{
+		Candidates.Sort([](const TPair<float, int32>& A, const TPair<float, int32>& B) { return A.Key < B.Key; });
+	}
+	else
+	{
+		for (int32 i = Candidates.Num() - 1; i > 0; --i)
+			Candidates.Swap(i, FMath::RandRange(0, i));
+	}
 
 	if (Candidates.IsEmpty())
 	{
@@ -950,9 +922,17 @@ void ATargetPawn::TryInitialPlacement()
 			PostPlacementRecheckTimer, this, &ATargetPawn::RevalidateDronePlacement, PostPlacementRecheckDelay, false);
 		bPlacementDone = true;
 
+		if (bDemoModeRequested)
+		{
+			DemoPhase = EDemoPhase::WaitingToStart;
+			if (IsValid(CachedDrone))
+				CachedDrone->SetAutopilotActive(true);
+		}
+
 		UE_LOG(LogTemp, Log,
-			TEXT("TargetPawn: placed at node %d — car Z=%.0f, path=%d waypoints, radius=%.0f cm"),
-			NodeId, CarPos.Z, CurrentPath.Num(), PlacementRadius);
+			TEXT("TargetPawn: placed at node %d — car Z=%.0f, path=%d waypoints, radius=%.0f cm%s"),
+			NodeId, CarPos.Z, CurrentPath.Num(), PlacementRadius,
+			bDemoModeRequested ? TEXT(" [DEMO MODE]") : TEXT(""));
 		return;
 	}
 
@@ -962,97 +942,29 @@ void ATargetPawn::TryInitialPlacement()
 		NumToTry, PlacementRadius);
 }
 
-static bool GroundSnap(UWorld* World, FVector& InOutPos)
-{
-	FHitResult Hit;
-	if (!World->LineTraceSingleByChannel(Hit,
-		FVector(InOutPos.X, InOutPos.Y, InOutPos.Z + 10000000.0f),
-		FVector(InOutPos.X, InOutPos.Y, InOutPos.Z - 1000000.0f),
-		ECC_WorldStatic))
-		return false;
-	InOutPos.Z = Hit.ImpactPoint.Z + 50.0f;
-	return true;
-}
-
-void ATargetPawn::SetupDemoMode()
-{
-	UWorld* World = GetWorld();
-	if (!World || !CachedGeoreference || !IsValid(CachedDrone))
-		return;
-
-	static constexpr double MarienplatzLon = 11.5755;
-	static constexpr double MarienplatzLat = 48.1374;
-
-	FVector AnchorPos = CachedGeoreference->TransformLongitudeLatitudeHeightPositionToUnreal(
-		FVector(MarienplatzLon, MarienplatzLat, 1000.0));
-	const bool bAnchorGrounded = GroundSnap(World, AnchorPos);
-
-	const FVector* CarNodePosRaw = Graph.NodeWorldPos.Find(DemoCarStartNodeId);
-	if (!CarNodePosRaw)
-	{
-		UE_LOG(LogTemp, Error, TEXT("TargetPawn: DEMO MODE — start node %d not found in graph"), DemoCarStartNodeId);
-		return;
-	}
-
-	FVector CarPos = *CarNodePosRaw;
-	const bool bCarGrounded = GroundSnap(World, CarPos);
-
-	if (!bAnchorGrounded || !bCarGrounded)
-	{
-		UE_LOG(LogTemp, Log,
-			TEXT("TargetPawn: DEMO MODE — terrain not streamed in yet (anchor=%s car=%s), retrying"),
-			bAnchorGrounded ? TEXT("ok") : TEXT("MISSING"),
-			bCarGrounded    ? TEXT("ok") : TEXT("MISSING"));
-		return;
-	}
-
-	DemoAnchorWorldPos = AnchorPos;
-
-	SetActorLocation(CarPos);
-	CurrentPath   = Graph.GeneratePath(DemoCarStartNodeId, DemoCarPathDistanceCm, INDEX_NONE,
-	                                    &DemoAnchorWorldPos, DemoCarPathBiasSteps);
-	PathNodeIndex = 0;
-
-	PatrolSpeed *= DemoCarSpeedScale;
-	EvadeSpeed  *= DemoCarSpeedScale;
-
-	const float NorthYaw = CachedGeoreference->TransformEastSouthUpRotatorToUnreal(
-		FRotator(0.0f, 270.0f, 0.0f), DemoAnchorWorldPos).Yaw;
-	const float WestYaw = CachedGeoreference->TransformEastSouthUpRotatorToUnreal(
-		FRotator(0.0f, 180.0f, 0.0f), DemoAnchorWorldPos).Yaw;
-
-	DemoSpinStartYaw      = NorthYaw;
-	DemoSpinTotalDeltaDeg = FMath::Fmod(WestYaw - NorthYaw + 360.0f, 360.0f);
-
-	CachedDrone->SetActorLocation(DemoAnchorWorldPos);
-	CachedDrone->SetActorRotation(FRotator(0.0f, NorthYaw, 0.0f));
-	CachedDrone->SetAutopilotActive(true);
-
-	DemoPhase = EDemoPhase::WaitingToStart;
-
-	AltitudeHistory.Empty();
-	AltitudeHistory.Add(CarPos.Z);
-
-	World->GetTimerManager().ClearTimer(PlacementTimer);
-	World->GetTimerManager().SetTimer(
-		TerrainSnapTimer, this, &ATargetPawn::PeriodicTerrainSnap, 60.0f, true);
-	AltStabilitySamples.Empty();
-	World->GetTimerManager().SetTimer(
-		AltStabilityTimer, this, &ATargetPawn::CheckAltitudeStability, 0.5f, true);
-	bPlacementDone = true;
-
-	UE_LOG(LogTemp, Log,
-		TEXT("TargetPawn: DEMO MODE placement — car at node %d Z=%.0f (%d waypoints), drone at Marienplatz anchor Z=%.0f, North yaw=%.1f West yaw=%.1f"),
-		DemoCarStartNodeId, CarPos.Z, CurrentPath.Num(), DemoAnchorWorldPos.Z, NorthYaw, WestYaw);
-}
-
 void ATargetPawn::NotifyLoadingDismissed()
 {
 	if (DemoPhase == EDemoPhase::WaitingToStart)
 	{
-		DemoPhase = EDemoPhase::Takeoff;
-		UE_LOG(LogTemp, Log, TEXT("TargetPawn: DEMO MODE — loading screen dismissed, starting scripted sequence"));
+		DemoPhase = EDemoPhase::Climb;
+		DemoClimbTargetZ = CachedDrone ? (CachedDrone->GetActorLocation().Z + DemoClimbHeightCm) : 0.0f;
+		UE_LOG(LogTemp, Log, TEXT("TargetPawn: DEMO MODE — loading screen dismissed, starting climb-spin-correct intro"));
 	}
+}
+
+bool ATargetPawn::ComputeYawErrorToTarget(const FVector& DronePos, const FVector& TargetXY, float& OutYawError) const
+{
+	if (!IsValid(CachedDrone))
+		return false;
+
+	const FVector ToTarget2D(TargetXY.X - DronePos.X, TargetXY.Y - DronePos.Y, 0.0f);
+	if (ToTarget2D.Size() <= 50.0f)
+		return false;
+
+	const float DesiredYaw = ToTarget2D.Rotation().Yaw;
+	const float CurrentYaw = CachedDrone->GetActorRotation().Yaw;
+	OutYawError = FMath::FindDeltaAngleDegrees(CurrentYaw, DesiredYaw);
+	return true;
 }
 
 FDroneControlInput ATargetPawn::ComputeDemoSteering(const FVector& DronePos, const FVector& TargetXY, float TargetZ) const
@@ -1063,14 +975,9 @@ FDroneControlInput ATargetPawn::ComputeDemoSteering(const FVector& DronePos, con
 	static constexpr float ThrottleGain = 1.0f / 800.0f;
 	Input.Throttle = FMath::Clamp(ZError * ThrottleGain, -1.0f, 1.0f);
 
-	const FVector ToTarget2D(TargetXY.X - DronePos.X, TargetXY.Y - DronePos.Y, 0.0f);
-	const float Dist2D = ToTarget2D.Size();
-	if (Dist2D > 50.0f && IsValid(CachedDrone))
+	float YawError = 0.0f;
+	if (ComputeYawErrorToTarget(DronePos, TargetXY, YawError))
 	{
-		const float DesiredYaw = ToTarget2D.Rotation().Yaw;
-		const float CurrentYaw = CachedDrone->GetActorRotation().Yaw;
-		const float YawError   = FMath::FindDeltaAngleDegrees(CurrentYaw, DesiredYaw);
-
 		static constexpr float YawGain = 1.0f / 45.0f;
 		Input.Yaw = FMath::Clamp(YawError * YawGain, -1.0f, 1.0f);
 
@@ -1124,29 +1031,52 @@ void ATargetPawn::TickDemoAutopilot(float DeltaTime)
 
 	switch (DemoPhase)
 	{
-	case EDemoPhase::Takeoff:
+	case EDemoPhase::Climb:
 	{
-		const float TargetZ = DemoAnchorWorldPos.Z + DemoTakeoffAltitudeCm;
 		FDroneControlInput ClimbInput;
-		ClimbInput.Throttle = FMath::Clamp((TargetZ - DronePos.Z) / 800.0f, -1.0f, 1.0f);
+		ClimbInput.Throttle = FMath::Clamp((DemoClimbTargetZ - DronePos.Z) / 800.0f, -1.0f, 1.0f);
 		CachedDrone->SetAutopilotInput(ClimbInput);
 
-		if (FMath::Abs(DronePos.Z - TargetZ) < 100.0f)
-			DemoPhase = EDemoPhase::Spin;
+		if (FMath::Abs(DronePos.Z - DemoClimbTargetZ) < 100.0f)
+		{
+			DemoSpinStartYaw = CachedDrone->GetActorRotation().Yaw;
+			DemoPhase        = EDemoPhase::Spin;
+		}
 		break;
 	}
 	case EDemoPhase::Spin:
 	{
-		const float TargetZ = DemoAnchorWorldPos.Z + DemoSpinAltitudeCm;
 		FDroneControlInput SpinInput;
-		SpinInput.Throttle = FMath::Clamp((TargetZ - DronePos.Z) / 800.0f, -1.0f, 1.0f);
+		SpinInput.Throttle = FMath::Clamp((DemoClimbTargetZ - DronePos.Z) / 800.0f, -1.0f, 1.0f);
 		SpinInput.Yaw = DemoSpinYawInput;
 		CachedDrone->SetAutopilotInput(SpinInput);
 
 		const float CurrentYaw    = CachedDrone->GetActorRotation().Yaw;
 		const float TraveledSoFar = FMath::Fmod(CurrentYaw - DemoSpinStartYaw + 720.0f, 360.0f);
 		if (TraveledSoFar >= DemoSpinTotalDeltaDeg)
+			DemoPhase = EDemoPhase::Correct;
+		break;
+	}
+	case EDemoPhase::Correct:
+	{
+		FDroneControlInput CorrectInput;
+		CorrectInput.Throttle = FMath::Clamp((DemoClimbTargetZ - DronePos.Z) / 800.0f, -1.0f, 1.0f);
+
+		float YawError = 0.0f;
+		if (ComputeYawErrorToTarget(DronePos, GetActorLocation(), YawError))
+		{
+			static constexpr float YawGain = 1.0f / 45.0f;
+			CorrectInput.Yaw = FMath::Clamp(YawError * YawGain, -1.0f, 1.0f);
+
+			if (FMath::Abs(YawError) < DemoCorrectYawToleranceDeg)
+				DemoPhase = EDemoPhase::Chase;
+		}
+		else
+		{
 			DemoPhase = EDemoPhase::Chase;
+		}
+
+		CachedDrone->SetAutopilotInput(CorrectInput);
 		break;
 	}
 	case EDemoPhase::Chase:
