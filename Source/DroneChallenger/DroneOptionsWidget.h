@@ -31,16 +31,20 @@ private:
     float     FadeAlpha = 0.f;
     FVector2D MousePos  = FVector2D::ZeroVector;
 
+    mutable FVector2D RestartMin = FVector2D::ZeroVector;
+    mutable FVector2D RestartMax = FVector2D::ZeroVector;
     mutable FVector2D MenuMin = FVector2D::ZeroVector;
     mutable FVector2D MenuMax = FVector2D::ZeroVector;
     mutable FVector2D ExitMin = FVector2D::ZeroVector;
     mutable FVector2D ExitMax = FVector2D::ZeroVector;
+    mutable bool bRestartHovered = false;
     mutable bool bMenuHovered = false;
     mutable bool bExitHovered = false;
 
     static float PixelWordWidth(const FString& Word, float PW);
     static void  DrawPixelWord(const FGeometry& Geom, FSlateWindowElementList& Out, int32& Layer,
                                const FString& Word, float X, float Y, float PW, float Alpha);
+    void ExecuteRestart();
     void ExecuteMainMenu();
     void ExecuteExit();
 };
