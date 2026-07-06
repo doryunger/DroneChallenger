@@ -18,6 +18,8 @@ static const FOGlyph OG_M = {{ 17, 27, 21, 17, 17, 17, 17 }};
 static const FOGlyph OG_N = {{ 17, 25, 21, 19, 17, 17, 17 }};
 static const FOGlyph OG_O = {{ 14, 17, 17, 17, 17, 17, 14 }};
 static const FOGlyph OG_P = {{ 30, 17, 17, 30, 16, 16, 16 }};
+static const FOGlyph OG_Q = {{ 14, 17, 17, 17, 21, 18, 13 }};
+static const FOGlyph OG_R = {{ 30, 17, 17, 30, 20, 18, 17 }};
 static const FOGlyph OG_S = {{ 14, 17, 16, 14,  1, 17, 14 }};
 static const FOGlyph OG_T = {{ 31,  4,  4,  4,  4,  4,  4 }};
 static const FOGlyph OG_U = {{ 17, 17, 17, 17, 17, 17, 14 }};
@@ -37,6 +39,8 @@ static const FOGlyph* GetOptionsGlyph(TCHAR C)
     case 'N': return &OG_N;
     case 'O': return &OG_O;
     case 'P': return &OG_P;
+    case 'Q': return &OG_Q;
+    case 'R': return &OG_R;
     case 'S': return &OG_S;
     case 'T': return &OG_T;
     case 'U': return &OG_U;
@@ -188,6 +192,11 @@ FReply UDroneOptionsWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry,
 
     const FVector2D P = InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
 
+    if (P.X >= RestartMin.X && P.X <= RestartMax.X && P.Y >= RestartMin.Y && P.Y <= RestartMax.Y)
+    {
+        ExecuteRestart();
+        return FReply::Handled();
+    }
     if (P.X >= MenuMin.X && P.X <= MenuMax.X && P.Y >= MenuMin.Y && P.Y <= MenuMax.Y)
     {
         ExecuteMainMenu();
@@ -204,7 +213,8 @@ FReply UDroneOptionsWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry,
 FCursorReply UDroneOptionsWidget::NativeOnCursorQuery(const FGeometry& InGeometry, const FPointerEvent& InCursorEvent)
 {
     const FVector2D P = InGeometry.AbsoluteToLocal(InCursorEvent.GetScreenSpacePosition());
-    if ((P.X >= MenuMin.X && P.X <= MenuMax.X && P.Y >= MenuMin.Y && P.Y <= MenuMax.Y) ||
+    if ((P.X >= RestartMin.X && P.X <= RestartMax.X && P.Y >= RestartMin.Y && P.Y <= RestartMax.Y) ||
+        (P.X >= MenuMin.X && P.X <= MenuMax.X && P.Y >= MenuMin.Y && P.Y <= MenuMax.Y) ||
         (P.X >= ExitMin.X && P.X <= ExitMax.X && P.Y >= ExitMin.Y && P.Y <= ExitMax.Y))
         return FCursorReply::Cursor(EMouseCursor::Hand);
     return FCursorReply::Cursor(EMouseCursor::Default);
@@ -277,8 +287,10 @@ int32 UDroneOptionsWidget::NativePaint(
     const float OptPadX   = OptPW * 5.f;
     const float OptPadY   = OptPW * 2.5f;
 
+    const FString Opt0 = TEXT("RESTART");
     const FString Opt1 = TEXT("BACK TO MAIN MENU");
-    const FString Opt2 = TEXT("EXIT");
+    const FString Opt2 = TEXT("QUIT");
+    const float Opt0W  = PixelWordWidth(Opt0, OptPW);
     const float Opt1W  = PixelWordWidth(Opt1, OptPW);
     const float Opt2W  = PixelWordWidth(Opt2, OptPW);
 
@@ -287,23 +299,30 @@ int32 UDroneOptionsWidget::NativePaint(
 
     const float EntryH   = OptH + OptPadY * 2.f;
     const float EntryGap = S * 0.04f;
-    const float TotalH   = 2.f * EntryH + EntryGap;
+    const float TotalH   = 3.f * EntryH + 2.f * EntryGap;
     const float StartY   = AreaTop + (AreaBot - AreaTop - TotalH) * 0.5f;
 
-    const float Entry1Top = StartY;
-    const float Entry2Top = StartY + EntryH + EntryGap;
+    const float Entry0Top = StartY;
+    const float Entry1Top = StartY + EntryH + EntryGap;
+    const float Entry2Top = StartY + 2.f * (EntryH + EntryGap);
 
+    const float Opt0X  = DX + (DW - Opt0W) * 0.5f;
+    const float Opt0Y  = Entry0Top + OptPadY;
     const float Opt1X  = DX + (DW - Opt1W) * 0.5f;
     const float Opt1Y  = Entry1Top + OptPadY;
     const float Opt2X  = DX + (DW - Opt2W) * 0.5f;
     const float Opt2Y  = Entry2Top + OptPadY;
 
     // update mutable hit rects and hover state
+    RestartMin = FVector2D(Opt0X - OptPadX, Entry0Top);
+    RestartMax = FVector2D(Opt0X + Opt0W + OptPadX, Entry0Top + EntryH);
     MenuMin = FVector2D(Opt1X - OptPadX, Entry1Top);
     MenuMax = FVector2D(Opt1X + Opt1W + OptPadX, Entry1Top + EntryH);
     ExitMin = FVector2D(Opt2X - OptPadX, Entry2Top);
     ExitMax = FVector2D(Opt2X + Opt2W + OptPadX, Entry2Top + EntryH);
 
+    bRestartHovered = MousePos.X >= RestartMin.X && MousePos.X <= RestartMax.X &&
+                      MousePos.Y >= RestartMin.Y && MousePos.Y <= RestartMax.Y;
     bMenuHovered = MousePos.X >= MenuMin.X && MousePos.X <= MenuMax.X &&
                    MousePos.Y >= MenuMin.Y && MousePos.Y <= MenuMax.Y;
     bExitHovered = MousePos.X >= ExitMin.X && MousePos.X <= ExitMax.X &&
@@ -325,10 +344,12 @@ int32 UDroneOptionsWidget::NativePaint(
         SlateBox_Opt(AllottedGeometry, OutDrawElements, LayerId, Max.X - B, Min.Y,     B,  RH, HC);
     };
 
+    if (bRestartHovered) DrawHoverRect(RestartMin, RestartMax);
     if (bMenuHovered) DrawHoverRect(MenuMin, MenuMax);
     if (bExitHovered) DrawHoverRect(ExitMin, ExitMax);
     ++LayerId;
 
+    DrawPixelWord(AllottedGeometry, OutDrawElements, LayerId, Opt0, Opt0X, Opt0Y, OptPW, FadeAlpha);
     DrawPixelWord(AllottedGeometry, OutDrawElements, LayerId, Opt1, Opt1X, Opt1Y, OptPW, FadeAlpha);
     DrawPixelWord(AllottedGeometry, OutDrawElements, LayerId, Opt2, Opt2X, Opt2Y, OptPW, FadeAlpha);
 
@@ -336,6 +357,13 @@ int32 UDroneOptionsWidget::NativePaint(
 }
 
 // ── actions ───────────────────────────────────────────────────────────────────
+
+void UDroneOptionsWidget::ExecuteRestart()
+{
+    UGameplayStatics::SetGamePaused(GetWorld(), false);
+    const FString LevelName = UGameplayStatics::GetCurrentLevelName(GetWorld(), true);
+    UGameplayStatics::OpenLevel(GetWorld(), FName(*LevelName));
+}
 
 void UDroneOptionsWidget::ExecuteMainMenu()
 {

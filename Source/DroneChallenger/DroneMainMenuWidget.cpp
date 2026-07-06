@@ -359,10 +359,11 @@ void UDroneMainMenuWidget::DrawBTInfoScreen(
     SlateBox_MM(Geom, Out, Layer, DX + DW - Bdr,  DY,             Bdr, DH,  GoldBdr);
     ++Layer;
 
-    const FString HdrTxt = TEXT("BT DISPLAY");
+    const FString HdrTxt = TEXT("BRIEFING");
 
     const float TitlePW = FMath::Max(3.f, FMath::Floor(DW * 0.88f / 95.f));
     int32       ISz     = FMath::Clamp(FMath::RoundToInt(S * 0.026f), 12, 30);
+    float       SubHdrPW = FMath::Max(2.f, FMath::Floor(TitlePW * 0.52f));
 
     const float HdrW = PixelWordWidth(HdrTxt, TitlePW);
     const float HdrH = 7.f * TitlePW;
@@ -375,6 +376,8 @@ void UDroneMainMenuWidget::DrawBTInfoScreen(
         FMath::Max(1.f, S * 0.0018f),
         FLinearColor(0.52f, 0.30f, 0.01f, FadeAlpha * 0.65f));
     ++Layer;
+
+    const FString SubHdrTxt = TEXT("BT DISPLAY");
 
     static const TCHAR* Lines[] = {
         TEXT("A live view of the target's own decision-making,"),
@@ -391,10 +394,18 @@ void UDroneMainMenuWidget::DrawBTInfoScreen(
     const float TextStartY = DivY + DH * 0.05f;
     const float BtnTopY    = DY + DH - (DH * 0.088f) - DH * 0.038f;
     const float Available  = BtnTopY - DH * 0.02f - TextStartY;
-    const float Needed     = (float)UE_ARRAY_COUNT(Lines) * ((float)MS->Measure(TEXT("A"),
-        FCoreStyle::GetDefaultFontStyle("Regular", ISz)).Y * 1.40f);
-    if (Needed > Available && Available > 0.f)
-        ISz = FMath::Max(8, FMath::RoundToInt((float)ISz * (Available / Needed)));
+    {
+        const float TmpIH      = (float)MS->Measure(TEXT("A"), FCoreStyle::GetDefaultFontStyle("Regular", ISz)).Y;
+        const float TmpILineGp = TmpIH * 1.40f;
+        const float SubHdrH    = 7.f * SubHdrPW;
+        const float Needed     = SubHdrH + TmpILineGp * 0.7f + (float)UE_ARRAY_COUNT(Lines) * TmpILineGp;
+        if (Needed > Available && Available > 0.f)
+        {
+            const float ScaleF = Available / Needed;
+            ISz      = FMath::Max(8, FMath::RoundToInt((float)ISz * ScaleF));
+            SubHdrPW = FMath::Max(2.f, SubHdrPW * ScaleF);
+        }
+    }
 
     const FSlateFontInfo IF = FCoreStyle::GetDefaultFontStyle("Regular", ISz);
     const float IH      = (float)MS->Measure(TEXT("A"), IF).Y;
@@ -406,6 +417,10 @@ void UDroneMainMenuWidget::DrawBTInfoScreen(
     Out.PushClip(FSlateClippingZone(Geom.ToPaintGeometry(
         FVector2f(DW - Bdr * 2.f, DH - Bdr * 2.f),
         FSlateLayoutTransform(FVector2f(DX + Bdr, DY + Bdr)))));
+
+    DrawPixelWord(Geom, Out, Layer, SubHdrTxt, IX, IY, SubHdrPW, FadeAlpha);
+    IY += 7.f * SubHdrPW + ILineGp * 0.7f;
+
     for (const TCHAR* Line : Lines)
     {
         if (Line[0] != TEXT('\0'))
