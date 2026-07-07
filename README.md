@@ -2,7 +2,9 @@
 
 A first-person drone simulator built on Unreal Engine 5.7 and Cesium for Unreal, set in a georeferenced recreation of Munich. Pilot an FPV drone across city area and chase down a Behavior-Tree-driven patrol car, whose live AI state is visualized in real time right next to the gameplay.
 
-![Drone Challenger demo](assets/dc_demo.gif)
+<p align="center">
+  <img src="assets/dc_demo.gif" alt="Drone Challenger demo">
+</p>
 
 [**▶ Play it live in your browser**](https://streams.vagon.io/streams/7d203400-fc2c-4b37-a084-cb42b4078521) — streamed via Vagon, no download or GPU required.
 
