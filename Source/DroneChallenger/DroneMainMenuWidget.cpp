@@ -264,6 +264,7 @@ void UDroneMainMenuWidget::DrawDialogScreen(
         { TEXT(""),                                                                false },
         { TEXT("KEYS"),                                       true  },
         { TEXT("W / S  - throttle up / down"),                 false },
+        { TEXT("↑ / ↓  - pitch forward / back"),                false },
         { TEXT("D / A  - roll right / left"),                  false },
         { TEXT("E / Q  - yaw right / left"),                   false },
         { TEXT(" C     - change camera"),                      false },

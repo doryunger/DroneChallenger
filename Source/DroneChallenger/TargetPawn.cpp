@@ -129,6 +129,16 @@ void ATargetPawn::BeginPlay()
 {
 	Super::BeginPlay();
 
+	bDemoMode = FParse::Param(FCommandLine::Get(), TEXT("demo"));
+
+	// Force these regardless of any per-instance override the placed level actor might carry --
+	// all EditAnywhere, so a level-serialized value would otherwise silently take precedence
+	// over the class defaults above.
+	PatrolSpeed   = 300.0f;
+	EvadeSpeed    = 300.0f;
+	CaptureRadius = 500.0f;
+	CaptureBoxExpansionCm = 1500.0f;
+
 	CachedDrone = Cast<ADroneActor>(UGameplayStatics::GetActorOfClass(GetWorld(), ADroneActor::StaticClass()));
 	CachedGeoreference = ACesiumGeoreference::GetDefaultGeoreference(this);
 
@@ -570,17 +580,42 @@ void ATargetPawn::UpdateDroneState()
 	const FVector CarPos3D   = GetActorLocation();
 	const FVector DronePos3D = CachedDrone->GetActorLocation();
 
+	// 3D capture range (full distance including altitude) -- computed unconditionally, before
+	// any FOV/heading pre-filter below. Bug found: this used to be computed *after* the angular
+	// pre-filter, which force-set bDroneInCaptureRange = false whenever the drone's own nose
+	// wasn't pointed toward the car -- meaning physically closing to within CaptureRadius while
+	// hovering (e.g. almost directly above the car, the natural way to get very close) could
+	// silently never register as capture range at all, no matter how close the drone actually
+	// got, unless its heading happened to also satisfy the FOV cone. Physically "tagging" the
+	// car by proximity should never depend on which way the drone happens to be facing --
+	// that heading/FOV requirement is specifically about sustained *visual tracking*
+	// (bDroneInFOV, the 30s tracking-time win below), a separate and narrower condition.
+	// Distance is measured to the nearest point on the car's actual mesh bounding box, not to
+	// its origin -- treating the car as a single point ignored its physical size entirely, so
+	// hovering right above the roof/hood/trunk (any part of the car other than exactly over its
+	// pivot) still measured several meters "away" even while visually touching it. Mesh->Bounds
+	// is the real, already-scaled, already-positioned world-space box, then further exaggerated
+	// by CaptureBoxExpansionCm in every direction (tunable in-editor) so vicinity keeps triggering
+	// more generously than the literal mesh geometry alone would allow.
+	const FBox    CarBox      = Mesh->Bounds.GetBox().ExpandBy(CaptureBoxExpansionCm);
+	const FVector NearestOnCar(
+		FMath::Clamp(DronePos3D.X, CarBox.Min.X, CarBox.Max.X),
+		FMath::Clamp(DronePos3D.Y, CarBox.Min.Y, CarBox.Max.Y),
+		FMath::Clamp(DronePos3D.Z, CarBox.Min.Z, CarBox.Max.Z));
+
+	const float Dist3D = FVector::Distance(NearestOnCar, DronePos3D);
+	bDroneInCaptureRange = (Dist3D <= CaptureRadius);
+
 	// 2D pre-filter — XY plane only, skips the expensive LineTraces when the
-	// car is clearly outside the detection cone.
+	// car is clearly outside the detection cone. Capture range above is unaffected.
 	const float Dist2D = FMath::Sqrt(
-		FMath::Square(CarPos3D.X - DronePos3D.X) +
-		FMath::Square(CarPos3D.Y - DronePos3D.Y));
+		FMath::Square(NearestOnCar.X - DronePos3D.X) +
+		FMath::Square(NearestOnCar.Y - DronePos3D.Y));
 
 	if (Dist2D > DetectionRange)
 	{
-		bDroneInCaptureRange = false;
-		bDroneHasLOS         = false;
-		bDroneInFOV          = false;
+		bDroneHasLOS = false;
+		bDroneInFOV  = false;
 		Commit();
 		return;
 	}
@@ -591,20 +626,16 @@ void ATargetPawn::UpdateDroneState()
 	const float      HalfFovCos  = FMath::Cos(FMath::DegreesToRadians(DetectionFovDeg * 0.5f));
 
 	// Only apply the angular pre-filter when the drone has a meaningful horizontal
-	// heading component; otherwise skip it and let the 3D check decide.
+	// heading component; otherwise skip it and let the 3D check decide. Capture range above is
+	// unaffected by this filter -- only LOS/FOV (tracking-time) are gated on it.
 	const bool bApplyAngle = !DroneFwd2D.IsNearlyZero(0.1f);
 	if (bApplyAngle && FVector2D::DotProduct(DroneFwd2D, DirToCar2D) < HalfFovCos)
 	{
-		bDroneInCaptureRange = false;
-		bDroneHasLOS         = false;
-		bDroneInFOV          = false;
+		bDroneHasLOS = false;
+		bDroneInFOV  = false;
 		Commit();
 		return;
 	}
-
-	// 3D capture range (full distance including altitude).
-	const float Dist3D = FVector::Distance(CarPos3D, DronePos3D);
-	bDroneInCaptureRange = (Dist3D <= CaptureRadius);
 
 	// Line-of-sight — three traces at different car heights, stops at first clear.
 	FCollisionQueryParams LOSParams(NAME_None, false, this);
@@ -831,8 +862,18 @@ void ATargetPawn::TryInitialPlacement()
 			Candidates.Add({ Dist2D, NodeId });
 	}
 
-	for (int32 i = Candidates.Num() - 1; i > 0; --i)
-		Candidates.Swap(i, FMath::RandRange(0, i));
+	if (bDemoMode)
+	{
+		// Sorted by ascending distance from DroneEditorPos (closest candidate first) so demo
+		// runs are deterministic and always land on the same starting node/car position.
+		Candidates.Sort([](const TPair<float, int32>& A, const TPair<float, int32>& B) { return A.Key < B.Key; });
+	}
+	else
+	{
+		// Fisher-Yates shuffle -- original behavior, random starting node/car position each run.
+		for (int32 i = Candidates.Num() - 1; i > 0; --i)
+			Candidates.Swap(i, FMath::RandRange(0, i));
+	}
 
 	if (Candidates.IsEmpty())
 	{

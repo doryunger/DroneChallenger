@@ -95,7 +95,10 @@ void ADroneHUD::BeginPlay()
 
     CountdownWidget = CreateWidget<UDroneCountdownWidget>(GetWorld(), UDroneCountdownWidget::StaticClass());
     if (CountdownWidget)
+    {
+        CountdownWidget->Init(Target);
         CountdownWidget->AddToViewport(5);
+    }
 
     OptionsWidget = CreateWidget<UDroneOptionsWidget>(GetWorld(), UDroneOptionsWidget::StaticClass());
     if (OptionsWidget)
