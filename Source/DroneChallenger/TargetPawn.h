@@ -34,11 +34,14 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Target|Patrol")
 	TObjectPtr<APatrolPath> PatrolPath;
 
+	// Car should stay stationary at its placement node no matter what -- zeroed regardless of
+	// which BT branch is active (set_speed_normal uses PatrolSpeed, set_speed_fast/"spotted"
+	// uses EvadeSpeed; both have to be 0, or the car would still move once the drone finds it).
 	UPROPERTY(EditAnywhere, Category = "Target|Movement")
-	float PatrolSpeed = 500.0f;
+	float PatrolSpeed = 300.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Target|Movement")
-	float EvadeSpeed = 1000.0f;
+	float EvadeSpeed = 300.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Target|Detection")
 	float DetectionRange = 20000.0f;
@@ -47,10 +50,17 @@ public:
 	float DetectionFovDeg = 90.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Target|Detection")
-	float CaptureRadius = 300.0f;
+	float CaptureRadius = 500.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Target|Detection")
 	float CaptureRequiredTime = 3.0f;
+
+	// Exaggerates the car's effective size for capture-distance purposes only (expands its real
+	// mesh bounding box outward by this amount in every direction before measuring the nearest
+	// point to the drone) -- doesn't touch the visual mesh at all, just makes "close to the car"
+	// easier to trigger without needing to be right on top of its literal geometry.
+	UPROPERTY(EditAnywhere, Category = "Target|Detection")
+	float CaptureBoxExpansionCm = 300.0f;
 
 	FOnTargetCaptured OnCaptured;
 	FOnAltitudeStable OnAltitudeStable;
@@ -63,6 +73,8 @@ public:
 	[[nodiscard]] bool IsDroneInFOV()      const { return bDroneInFOV; }
 	[[nodiscard]] bool HasDroneMoved()     const { return bDroneHasEverMoved; }
 	[[nodiscard]] bool IsHUDServerRunning() const;
+	[[nodiscard]] bool  IsDroneInCaptureRange() const { return bDroneInCaptureRange; }
+	[[nodiscard]] float GetCaptureTimer()       const { return CaptureTimer; }
 
 private:
 	UPROPERTY(VisibleAnywhere, Category = "Components")
@@ -138,6 +150,7 @@ private:
 	FVector      DroneEditorPos;
 	float        PlacementRadius    = 20000.0f;
 	bool         bPlacementDone     = false;
+	bool         bDemoMode          = false;
 
 	float  PlacementTileProgress = -1.f;
 	int32  PlacementStablePolls  = 0;
