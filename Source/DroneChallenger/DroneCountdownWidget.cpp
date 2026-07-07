@@ -1,8 +1,14 @@
 #include "DroneCountdownWidget.h"
 #include "DroneGameMode.h"
+#include "TargetPawn.h"
 #include "Styling/CoreStyle.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Fonts/FontMeasure.h"
+
+void UDroneCountdownWidget::Init(ATargetPawn* InTarget)
+{
+	Target = InTarget;
+}
 
 void UDroneCountdownWidget::StartCountdown()
 {
@@ -24,6 +30,21 @@ void UDroneCountdownWidget::NativeTick(const FGeometry& MyGeometry, float InDelt
 		const float T = GM->GetRemainingTime();
 		if (T >= 0.f)
 			RemainingSeconds = T;
+	}
+
+	// Vicinity countdown: mirrors ATargetPawn::UpdateDroneState's own CaptureTimer, which
+	// already resets to 0 the instant bDroneInCaptureRange goes false -- so simply reading both
+	// values fresh every tick gives "appears while in range, counts down, disappears the moment
+	// range is lost, restarts from CaptureRequiredTime next time" for free, no separate state
+	// machine needed here.
+	if (Target)
+	{
+		bCachedInCaptureRange  = Target->IsDroneInCaptureRange();
+		CachedCaptureRemaining = FMath::Max(0.f, Target->CaptureRequiredTime - Target->GetCaptureTimer());
+	}
+	else
+	{
+		bCachedInCaptureRange = false;
 	}
 }
 
@@ -103,6 +124,31 @@ int32 UDroneCountdownWidget::NativePaint(const FPaintArgs& Args, const FGeometry
 				BoxY + PadY + (float)TitleSz.Y + Gap))),
 		FText::FromString(TimeStr), TimerFont, ESlateDrawEffect::None,
 		TimerColor);
+	++LayerId;
+
+	float BelowY = BoxY + BoxH + H * 0.012f;
+
+	// Vicinity (capture) countdown -- plain text, no background box, directly below the distance
+	// readout only while the drone is in capture range, disappearing the instant range is lost.
+	if (bCachedInCaptureRange)
+	{
+		const FString VicStr = FString::Printf(TEXT("Capture Countdown : %.1f"), CachedCaptureRemaining);
+
+		const int32 VicTimerFontSz = FMath::Clamp(FMath::RoundToInt(H * 0.055f), 24, 46);
+		const FSlateFontInfo VicTimerFont = FCoreStyle::GetDefaultFontStyle("Bold", VicTimerFontSz);
+
+		const FVector2D VicSz = FM->Measure(VicStr, VicTimerFont);
+
+		FSlateDrawElement::MakeText(OutDrawElements, LayerId,
+			AllottedGeometry.ToPaintGeometry(
+				FVector2f((float)VicSz.X, (float)VicSz.Y),
+				FSlateLayoutTransform(FVector2f(
+					W * 0.5f - (float)VicSz.X * 0.5f,
+					BelowY))),
+			FText::FromString(VicStr), VicTimerFont, ESlateDrawEffect::None,
+			FLinearColor::White);
+		++LayerId;
+	}
 
 	return LayerId + 1;
 }

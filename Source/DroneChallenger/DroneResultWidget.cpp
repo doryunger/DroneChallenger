@@ -3,6 +3,8 @@
 #include "Styling/CoreStyle.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Kismet/GameplayStatics.h"
+#include "Math/TransformCalculus2D.h"
+#include "Rendering/SlateRenderTransform.h"
 
 struct FRGlyph { uint8 Rows[7]; };
 
@@ -57,11 +59,56 @@ static const FLinearColor kGradient[7] = {
     FLinearColor(0.36f, 0.12f, 0.00f),
 };
 
+void UDroneResultWidget::SpawnConfetti(const FVector2D& ViewportSize)
+{
+    const float W = ViewportSize.X;
+    const float H = ViewportSize.Y;
+    constexpr int32 PiecesPerCorner = 70;
+
+    static const FLinearColor GoldColors[] = {
+        FLinearColor(1.00f, 0.84f, 0.20f),
+        FLinearColor(1.00f, 0.70f, 0.10f),
+        FLinearColor(0.95f, 0.55f, 0.03f),
+        FLinearColor(1.00f, 0.95f, 0.60f),
+    };
+
+    // InwardSign biases the launch cone from straight up toward the opposite side of the
+    // screen, so the left-corner burst fans up-and-right and the right-corner burst fans
+    // up-and-left, meeting roughly in the middle.
+    auto SpawnFromCorner = [&](float OriginX, float InwardSign)
+    {
+        for (int32 i = 0; i < PiecesPerCorner; ++i)
+        {
+            FConfettiPiece P;
+            P.Pos = FVector2D(OriginX, H);
+
+            const float AngleDeg = -90.f + InwardSign * FMath::FRandRange(15.f, 75.f);
+            const float AngleRad = FMath::DegreesToRadians(AngleDeg);
+            const float Speed    = FMath::FRandRange(H * 0.55f, H * 1.05f);
+            P.Vel = FVector2D(FMath::Cos(AngleRad), FMath::Sin(AngleRad)) * Speed;
+
+            P.Rotation      = FMath::FRandRange(0.f, 360.f);
+            P.RotationSpeed = FMath::FRandRange(-360.f, 360.f);
+            P.Size          = FMath::FRandRange(W * 0.006f, W * 0.014f);
+            P.Color         = GoldColors[FMath::RandRange(0, UE_ARRAY_COUNT(GoldColors) - 1)];
+            P.Color.A       = FMath::FRandRange(0.75f, 1.f);
+
+            ConfettiPieces.Add(P);
+        }
+    };
+
+    ConfettiPieces.Reset(PiecesPerCorner * 2);
+    SpawnFromCorner(0.f, 1.f);
+    SpawnFromCorner(W, -1.f);
+}
+
 void UDroneResultWidget::ShowResult(bool bInWon)
 {
     bWon        = bInWon;
     FadeAlpha   = 0.f;
     ElapsedTime = 0.f;
+    bConfettiSpawned = false;
+    ConfettiPieces.Reset();
     SetVisibility(ESlateVisibility::Visible);
 
     if (APlayerController* PC = GetOwningPlayer())
@@ -81,6 +128,23 @@ void UDroneResultWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
         return;
     ElapsedTime += InDeltaTime;
     FadeAlpha = FMath::Min(FadeAlpha + InDeltaTime * 1.5f, 1.f);
+
+    // Deferred until the first tick because ShowResult() (called before this widget has ever
+    // been laid out) doesn't know the viewport size yet, and the burst geometry (launch speed,
+    // piece size) is scaled off of it.
+    if (bWon && !bConfettiSpawned && MyGeometry.GetLocalSize().X > 0.f)
+    {
+        SpawnConfetti(MyGeometry.GetLocalSize());
+        bConfettiSpawned = true;
+    }
+
+    const float Gravity = MyGeometry.GetLocalSize().Y * 0.9f;
+    for (FConfettiPiece& P : ConfettiPieces)
+    {
+        P.Vel.Y    += Gravity * InDeltaTime;
+        P.Pos      += P.Vel * InDeltaTime;
+        P.Rotation += P.RotationSpeed * InDeltaTime;
+    }
 }
 
 int32 UDroneResultWidget::NativePaint(
@@ -223,6 +287,29 @@ int32 UDroneResultWidget::NativePaint(
         BtnCurX += 6.f * BtnPixelW;
     }
     ++LayerId;
+
+    if (bWon)
+    {
+        for (const FConfettiPiece& P : ConfettiPieces)
+        {
+            const float Alpha = P.Color.A * FadeAlpha;
+            if (Alpha <= 0.f) continue;
+
+            const FVector2D PieceSize(P.Size, P.Size * 0.42f);
+            const FSlateRenderTransform RotXform(FQuat2D(FMath::DegreesToRadians(P.Rotation)));
+
+            FSlateDrawElement::MakeBox(OutDrawElements, LayerId,
+                AllottedGeometry.ToPaintGeometry(
+                    FVector2f((float)PieceSize.X, (float)PieceSize.Y),
+                    FSlateLayoutTransform(FVector2f(
+                        (float)(P.Pos.X - PieceSize.X * 0.5f),
+                        (float)(P.Pos.Y - PieceSize.Y * 0.5f))),
+                    RotXform),
+                White, ESlateDrawEffect::None,
+                FLinearColor(P.Color.R, P.Color.G, P.Color.B, Alpha));
+        }
+        ++LayerId;
+    }
 
     return LayerId;
 }
