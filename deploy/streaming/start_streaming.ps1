@@ -63,9 +63,17 @@ if ((Test-PortListening $StreamerPort) -or (Test-PortListening $PlayerPort)) {
 }
 
 if ($PublicIp -eq "auto") {
-    $Token = Invoke-RestMethod -Method Put -Uri "http://169.254.169.254/latest/api/token" -Headers @{ "X-aws-ec2-metadata-token-ttl-seconds" = "300" } -TimeoutSec 5
-    $PublicIp = Invoke-RestMethod -Uri "http://169.254.169.254/latest/meta-data/public-ipv4" -Headers @{ "X-aws-ec2-metadata-token" = $Token } -TimeoutSec 5
-    if (-not $PublicIp) { Fail "Could not read the public IPv4 address from instance metadata." }
+    $Deadline = (Get-Date).AddMinutes(3)
+    $PublicIp = ""
+    while (-not $PublicIp) {
+        try {
+            $Token = Invoke-RestMethod -Method Put -Uri "http://169.254.169.254/latest/api/token" -Headers @{ "X-aws-ec2-metadata-token-ttl-seconds" = "300" } -TimeoutSec 5
+            $PublicIp = Invoke-RestMethod -Uri "http://169.254.169.254/latest/meta-data/public-ipv4" -Headers @{ "X-aws-ec2-metadata-token" = $Token } -TimeoutSec 5
+        } catch {
+            if ((Get-Date) -gt $Deadline) { Fail "Could not read the public IPv4 address from instance metadata: $($_.Exception.Message)" }
+            Start-Sleep -Seconds 5
+        }
+    }
     Write-Log "Public IP from instance metadata: $PublicIp"
 }
 
