@@ -86,7 +86,7 @@ if ($PublicIp -eq "auto") {
 $ServerArgs = @("--turn-user", $Config.TurnUser, "--turn-pass", $Config.TurnPass)
 if ($PublicIp) { $ServerArgs += @("--publicip", $PublicIp) } else { $ServerArgs += @("--publicip", "127.0.0.1") }
 if ($StartTurn) { $ServerArgs += "--start-turn" }
-$ServerArgs += @("--", "--streamer_port", $StreamerPort, "--player_port", $PlayerPort)
+$ServerArgs += @("--", "--streamer_port", $StreamerPort, "--player_port", $PlayerPort, "--max_players", "1", "--rest_api")
 
 $ServerLog = Join-Path $LogDir "signalling.log"
 $ServerCmd = "/s /c `"`"$StartBat`" $($ServerArgs -join ' ') < nul > `"$ServerLog`" 2>&1`""
