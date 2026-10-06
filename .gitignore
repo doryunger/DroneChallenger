@@ -75,3 +75,7 @@ Packaged/
 
 # Pixel Streaming 2 sample scripts, copied in by the plugin
 Samples/
+
+# Streaming deployment: local secrets and runtime logs
+deploy/streaming/streaming.local.json
+deploy/streaming/logs/
