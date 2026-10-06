@@ -26,3 +26,14 @@ Locally the public IP is `127.0.0.1`. On EC2, pass the instance's public IP with
 | 8889 | TCP | SFU connections; unused, local only |
 | 19303 | TCP/UDP | TURN relay (when `-StartTurn`) |
 | WebRTC media | UDP (ephemeral range) | Direct peer media between browser and game |
+
+## Host setup (`install_host.ps1`) and known pitfalls
+
+`install_host.ps1` runs once, elevated, on a fresh Windows Server 2022 GPU instance. It unblocks the kit files, opens the Windows Firewall ports, enables the hardware GPU for Remote Desktop sessions, imports the trusted root certificates from Windows Update, installs Media Foundation and the VC++ runtime, downloads and installs the NVIDIA GRID driver from the AWS driver bucket (requires an instance role with `AmazonS3ReadOnlyAccess`), fetches portable Git, and runs `setup_streaming.ps1`. A reboot is required afterwards.
+
+Pitfalls found on the first EC2 deployment:
+
+- **Unsigned executables from a downloaded zip.** Files extracted from an internet-downloaded zip carry the Mark of the Web. `Start-Process` (ShellExecute) on the unsigned game then shows "publisher could not be verified" and the game exits with code 1 every launch. Both scripts unblock the kit (`Unblock-File`).
+- **Missing root certificates.** A fresh Windows Server only downloads root certificates on demand when SChannel needs them. The game's HTTP stack (OpenSSL via libcurl) never triggers that, so Cesium could not verify `tile.googleapis.com` and the loading screen never finished (tile cache stayed empty). The game now ships its own CA bundle at `Content/Certificates/cacert.pem` (copied from the engine, staged as non-UFS so it sits next to the game), which `FSslCertificateManager` loads before the platform store; the host script additionally imports the Windows Update root list.
+- **Moving the infrastructure after setup.** npm workspaces in `PixelStreamingInfrastructure` store absolute paths. Renaming or moving the folder after `setup_streaming.ps1` breaks the signalling server with `MODULE_NOT_FOUND`. Re-run setup after any move.
+- **NVIDIA installer and `Start-Process -Wait`.** In Windows PowerShell 5.1, `-Wait` also waits for every descendant process; the driver installer leaves a resident service, so the script hung. The scripts wait only on the installer process (`WaitForExit`).

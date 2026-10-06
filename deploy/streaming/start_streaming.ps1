@@ -43,6 +43,7 @@ function Stop-PortOwners([int[]]$Ports) {
 
 if (-not (Test-Path $GameExe)) { Fail "Game executable not found: $GameExe" }
 $GameExe = (Resolve-Path $GameExe).Path
+Get-ChildItem -Path (Split-Path $GameExe -Parent) -Recurse -File | Unblock-File
 $StartBat = Join-Path $InfraDir "SignallingWebServer\platform_scripts\cmd\start.bat"
 if (-not (Test-Path $StartBat)) { Fail "Signalling server not set up. Run setup_streaming.ps1 first." }
 $StartBat = (Resolve-Path $StartBat).Path
@@ -59,6 +60,13 @@ if (-not $Config.TurnUser -or -not $Config.TurnPass) { Fail "$ConfigFile must de
 
 if ((Test-PortListening $StreamerPort) -or (Test-PortListening $PlayerPort)) {
     Fail "Port $StreamerPort or $PlayerPort is already in use. Stop the running signalling server first."
+}
+
+if ($PublicIp -eq "auto") {
+    $Token = Invoke-RestMethod -Method Put -Uri "http://169.254.169.254/latest/api/token" -Headers @{ "X-aws-ec2-metadata-token-ttl-seconds" = "300" } -TimeoutSec 5
+    $PublicIp = Invoke-RestMethod -Uri "http://169.254.169.254/latest/meta-data/public-ipv4" -Headers @{ "X-aws-ec2-metadata-token" = $Token } -TimeoutSec 5
+    if (-not $PublicIp) { Fail "Could not read the public IPv4 address from instance metadata." }
+    Write-Log "Public IP from instance metadata: $PublicIp"
 }
 
 $ServerArgs = @("--turn-user", $Config.TurnUser, "--turn-pass", $Config.TurnPass)
