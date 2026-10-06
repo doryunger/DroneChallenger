@@ -34,9 +34,6 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Target|Patrol")
 	TObjectPtr<APatrolPath> PatrolPath;
 
-	// Car should stay stationary at its placement node no matter what -- zeroed regardless of
-	// which BT branch is active (set_speed_normal uses PatrolSpeed, set_speed_fast/"spotted"
-	// uses EvadeSpeed; both have to be 0, or the car would still move once the drone finds it).
 	UPROPERTY(EditAnywhere, Category = "Target|Movement")
 	float PatrolSpeed = 300.0f;
 
@@ -55,10 +52,6 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Target|Detection")
 	float CaptureRequiredTime = 3.0f;
 
-	// Exaggerates the car's effective size for capture-distance purposes only (expands its real
-	// mesh bounding box outward by this amount in every direction before measuring the nearest
-	// point to the drone) -- doesn't touch the visual mesh at all, just makes "close to the car"
-	// easier to trigger without needing to be right on top of its literal geometry.
 	UPROPERTY(EditAnywhere, Category = "Target|Detection")
 	float CaptureBoxExpansionCm = 300.0f;
 
@@ -126,6 +119,7 @@ private:
 	bool bDroneHasLOS = false;
 	bool bOnEvadePath = false;
 	bool bDroneHasEverMoved = false;
+	bool bCaptureArmed = false;
 	float CaptureTimer = 0.0f;
 	float LastDeltaTime = 0.0f;
 	float CurrentSpeed = 0.0f;
@@ -139,6 +133,7 @@ private:
 	void AdvanceAlongPath();
 	void AdvanceAlongGraph();
 	bool PlaceDroneNearCar(const FVector& CarPos, const FVector& CarForward);
+	[[nodiscard]] bool IsInCaptureZone(const FVector& CarPos, const FVector& Point) const;
 	void TryInitialPlacement();
 	bool IsSceneStreamingReady();
 	void RevalidateDronePlacement();

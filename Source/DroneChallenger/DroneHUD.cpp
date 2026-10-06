@@ -254,7 +254,7 @@ void ADroneHUD::DrawHUD()
     const float PFDRadius = PFDBaseR * ARBoost;
     const float mmSize    = PFDRadius * 2.f * 1.15f;
 
-    if (UGameViewportSubsystem* Sub = UGameViewportSubsystem::Get(GetWorld()))
+    if (UGameViewportSubsystem* Sub = UGameViewportSubsystem::Get())
     {
         FGameViewportWidgetSlot Slot = Sub->GetWidgetSlot(MiniMapBrowser);
         Slot.Anchors   = FAnchors(0.f, 0.f);

@@ -9,6 +9,7 @@ Saved/
 *.opendb
 *.sdf
 *.sln
+*.slnx
 *.suo
 *.xcworkspace
 *.xcodeproj
@@ -68,3 +69,9 @@ Source/ThirdParty/ArboristLib/include/
 # OS
 Thumbs.db
 .DS_Store
+
+# Packaged builds
+Packaged/
+
+# Pixel Streaming 2 sample scripts, copied in by the plugin
+Samples/

@@ -23,6 +23,7 @@ protected:
     virtual FCursorReply NativeOnCursorQuery(const FGeometry& InGeometry, const FPointerEvent& InCursorEvent) override;
     virtual void NativeOnFocusLost(const FFocusEvent& InFocusEvent) override;
     virtual bool NativeSupportsKeyboardFocus() const override;
+    virtual void NativeOnInitialized() override;
 
 private:
     enum class EState : uint8 { Hidden, FadingIn, Visible, FadingOut };
@@ -30,6 +31,7 @@ private:
     EState    State     = EState::Hidden;
     float     FadeAlpha = 0.f;
     FVector2D MousePos  = FVector2D::ZeroVector;
+    bool      bAllowQuit = true;
 
     mutable FVector2D RestartMin = FVector2D::ZeroVector;
     mutable FVector2D RestartMax = FVector2D::ZeroVector;
@@ -41,6 +43,7 @@ private:
     mutable bool bMenuHovered = false;
     mutable bool bExitHovered = false;
 
+    [[nodiscard]] static bool IsHostedSession();
     static float PixelWordWidth(const FString& Word, float PW);
     static void  DrawPixelWord(const FGeometry& Geom, FSlateWindowElementList& Out, int32& Layer,
                                const FString& Word, float X, float Y, float PW, float Alpha);
