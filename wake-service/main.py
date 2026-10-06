@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import ipaddress
 import json
 import os
@@ -26,6 +27,7 @@ MAX_TRACKED_PATHS = 100
 S3_BUCKET_NAME = os.environ.get("S3_BUCKET_NAME")
 S3_LOG_PREFIX = "logs/dronechallenger-wake-service"
 PRIVATE_PATH_PREFIXES = ("/api", "/api-definition")
+DRONE_PNG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "drone.png")
 
 ec2 = boto3.client("ec2", region_name=AWS_REGION)
 s3 = boto3.client("s3", region_name=AWS_REGION)
@@ -290,26 +292,64 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+with open(DRONE_PNG_PATH, "rb") as _f:
+    DRONE_DATA_URI = "data:image/png;base64," + base64.b64encode(_f.read()).decode()
+
 BUSY_PAGE = """<!doctype html>
 <html>
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Drone Challenger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
 <style>
   html, body { height: 100%; margin: 0; }
   body {
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
-    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-    background: #0f1115; color: #e8e8e8; text-align: center;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px;
+    background: #000; color: #e8e8e8; overflow: hidden;
+    font-family: "Press Start 2P", ui-monospace, Menlo, monospace;
   }
-  p { margin: 0; }
-  .sub { color: #9aa0a6; font-size: 14px; }
+  .stage { position: relative; width: min(820px, 92vw); height: 220px; }
+  .title {
+    position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+    display: flex; justify-content: center; gap: 0.08em;
+    font-size: clamp(28px, 7vw, 64px);
+  }
+  .title span {
+    display: inline-block;
+    background: linear-gradient(#fff6b0 0%, #ffd23a 35%, #f0a400 65%, #b86b00 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: wave 1.8s ease-in-out infinite;
+  }
+  .drone {
+    position: absolute; top: 18%; width: clamp(110px, 22vw, 190px); left: 0;
+    filter: drop-shadow(0 0 10px rgba(255, 210, 58, 0.35));
+    animation: fly 6s ease-in-out infinite alternate, bob 1.2s ease-in-out infinite;
+  }
+  .status { font-size: clamp(10px, 2.2vw, 14px); color: #c9c9c9; letter-spacing: 0.04em; text-align: center; line-height: 1.8; }
+  .sub { color: #7d7d7d; }
+  @keyframes wave { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-0.18em); } }
+  @keyframes fly { from { left: -4%; } to { left: calc(100% - clamp(110px, 22vw, 190px) + 4%); } }
+  @keyframes bob { 0%, 100% { margin-top: 0; } 50% { margin-top: -10px; } }
 </style>
 </head>
 <body>
-  <p>Someone is flying right now.</p>
-  <p class="sub">Only one pilot at a time. This page retries automatically.</p>
-<script>setTimeout(() => window.location.reload(), 15000);</script>
+  <div class="stage">
+    <div class="title" id="title"></div>
+    <img class="drone" src="__DRONE__" alt="" />
+  </div>
+  <div class="status"><div>Someone is flying right now.</div><div class="sub">One pilot at a time. This page retries automatically.</div></div>
+<script>
+const title = document.getElementById("title");
+[..."AIRSPACE BUSY"].forEach((ch, i) => {
+  const s = document.createElement("span");
+  s.textContent = ch === " " ? " " : ch;
+  s.style.animationDelay = (i * 0.12) + "s";
+  title.appendChild(s);
+});
+setTimeout(() => window.location.reload(), 15000);
+</script>
 </body>
 </html>"""
 
@@ -317,50 +357,57 @@ WAKING_PAGE = """<!doctype html>
 <html>
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Drone Challenger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
 <style>
   html, body { height: 100%; margin: 0; }
   body {
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 32px;
-    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
-    background: #0f1115; color: #e8e8e8;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px;
+    background: #000; color: #e8e8e8; overflow: hidden;
+    font-family: "Press Start 2P", ui-monospace, Menlo, monospace;
   }
-  .radar {
-    position: relative; width: 140px; height: 140px; border-radius: 50%; overflow: hidden;
-    background:
-      radial-gradient(circle, transparent 0 32%, rgba(46,255,138,0.22) 32.5% 33.5%, transparent 34% 65%,
-        rgba(46,255,138,0.22) 65.5% 66.5%, transparent 67%),
-      linear-gradient(transparent calc(50% - 0.5px), rgba(46,255,138,0.18) 0 calc(50% + 0.5px), transparent 0),
-      linear-gradient(90deg, transparent calc(50% - 0.5px), rgba(46,255,138,0.18) 0 calc(50% + 0.5px), transparent 0),
-      #14161c;
-    box-shadow: 0 0 0 1px rgba(46,255,138,0.4), 0 0 32px rgba(46,255,138,0.15);
+  .stage { position: relative; width: min(820px, 92vw); height: 220px; }
+  .title {
+    position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+    display: flex; justify-content: center; gap: 0.08em;
+    font-size: clamp(28px, 7vw, 64px);
   }
-  .sweep {
-    position: absolute; inset: 0; border-radius: 50%;
-    background: conic-gradient(from 0deg, transparent 0deg 280deg, rgba(46,255,138,0.6) 360deg);
-    animation: sweep 2.4s linear infinite;
+  .title span {
+    display: inline-block;
+    background: linear-gradient(#fff6b0 0%, #ffd23a 35%, #f0a400 65%, #b86b00 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: wave 1.8s ease-in-out infinite;
   }
-  .blip {
-    position: absolute; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%;
-    background: #8dffbf; box-shadow: 0 0 8px #2eff8a; opacity: 0;
-    animation: blip 2.4s linear infinite;
+  .drone {
+    position: absolute; top: 18%; width: clamp(110px, 22vw, 190px); left: 0;
+    filter: drop-shadow(0 0 10px rgba(255, 210, 58, 0.35));
+    animation: fly 6s ease-in-out infinite alternate, bob 1.2s ease-in-out infinite;
   }
-  .b1 { top: 28%; left: 64%; animation-delay: 0.25s; }
-  .b2 { top: 68%; left: 72%; animation-delay: 0.9s; }
-  .b3 { top: 60%; left: 30%; animation-delay: 1.55s; }
-  @keyframes sweep { to { transform: rotate(360deg); } }
-  @keyframes blip { 0% { opacity: 0; } 4% { opacity: 1; } 45% { opacity: 0; } 100% { opacity: 0; } }
-  #status { font-size: 16px; letter-spacing: 0.02em; margin: 0; }
+  .status { font-size: clamp(10px, 2.2vw, 14px); color: #c9c9c9; letter-spacing: 0.04em; text-align: center; line-height: 1.8; }
+  .sub { color: #7d7d7d; }
+  @keyframes wave { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-0.18em); } }
+  @keyframes fly { from { left: -4%; } to { left: calc(100% - clamp(110px, 22vw, 190px) + 4%); } }
+  @keyframes bob { 0%, 100% { margin-top: 0; } 50% { margin-top: -10px; } }
 </style>
 </head>
 <body>
-  <div class="radar">
-    <div class="sweep"></div>
-    <span class="blip b1"></span><span class="blip b2"></span><span class="blip b3"></span>
+  <div class="stage">
+    <div class="title" id="title"></div>
+    <img class="drone" src="__DRONE__" alt="" />
   </div>
-  <p id="status">Starting the game server...</p>
+  <div class="status"><div id="status">Waking the server...</div><div class="sub" id="sub">This takes about 2 minutes</div></div>
 <script>
+const title = document.getElementById("title");
+[..."STARTING..."].forEach((ch, i) => {
+  const s = document.createElement("span");
+  s.textContent = ch;
+  s.style.animationDelay = (i * 0.12) + "s";
+  title.appendChild(s);
+});
 const status = document.getElementById("status");
+const sub = document.getElementById("sub");
 
 async function poll() {
   try {
@@ -372,10 +419,16 @@ async function poll() {
     }
     if (data.stage === "error") {
       status.textContent = "Something went wrong";
+      sub.textContent = "Retrying...";
     } else if (data.ec2_state === "stopping") {
       status.textContent = "Closing the previous session...";
+      sub.textContent = "Then the server starts again";
+    } else if (data.stage === "warming") {
+      status.textContent = "Launching the game...";
+      sub.textContent = "Almost there";
     } else {
-      status.textContent = "Starting the game server... (about 2 minutes)";
+      status.textContent = "Waking the server...";
+      sub.textContent = "This takes about 2 minutes";
     }
   } catch (e) {
     status.textContent = "Reconnecting...";
@@ -436,12 +489,12 @@ async def proxy_http(request: Request, path: str):
     accepts_html = "text/html" in request.headers.get("accept", "")
     if status["stage"] != "ready":
         if accepts_html and request.method == "GET":
-            return HTMLResponse(WAKING_PAGE)
+            return HTMLResponse(WAKING_PAGE.replace("__DRONE__", DRONE_DATA_URI))
         return JSONResponse(status, status_code=503, headers={"Retry-After": "3"})
 
     if accepts_html and request.method == "GET" and path in ("", "player.html"):
         if await connected_players(status["ip"]) > 0:
-            return HTMLResponse(BUSY_PAGE, status_code=503, headers={"Retry-After": "15"})
+            return HTMLResponse(BUSY_PAGE.replace("__DRONE__", DRONE_DATA_URI), status_code=503, headers={"Retry-After": "15"})
 
     return await _proxy_http(request, path)
 
