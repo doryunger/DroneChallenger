@@ -306,11 +306,11 @@ BUSY_PAGE = """<!doctype html>
 <style>
   html, body { height: 100%; margin: 0; }
   body {
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 36px;
     background: #000; color: #e8e8e8; overflow: hidden;
     font-family: "Press Start 2P", ui-monospace, Menlo, monospace;
   }
-  .stage { position: relative; width: min(820px, 92vw); height: 220px; }
+  .stage { position: relative; width: min(1040px, 96vw); height: 340px; }
   .title {
     position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
     display: flex; justify-content: center; gap: 0.08em;
@@ -322,22 +322,50 @@ BUSY_PAGE = """<!doctype html>
     -webkit-background-clip: text; background-clip: text; color: transparent;
     animation: wave 1.8s ease-in-out infinite;
   }
+  .drone-path { position: absolute; inset: 0; pointer-events: none; }
   .drone {
-    position: absolute; top: 18%; width: clamp(110px, 22vw, 190px); left: 0;
-    filter: drop-shadow(0 0 10px rgba(255, 210, 58, 0.35));
-    animation: fly 6s ease-in-out infinite alternate, bob 1.2s ease-in-out infinite;
+    position: absolute; width: clamp(72px, 13vw, 124px);
+    filter: drop-shadow(0 0 8px rgba(255, 210, 58, 0.35));
+    animation: loiter 11s linear infinite;
   }
+  .drone img { display: block; width: 100%; animation: bob 1.3s ease-in-out infinite; }
   .status { font-size: clamp(10px, 2.2vw, 14px); color: #c9c9c9; letter-spacing: 0.04em; text-align: center; line-height: 1.8; }
   .sub { color: #7d7d7d; }
   @keyframes wave { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-0.18em); } }
-  @keyframes fly { from { left: -4%; } to { left: calc(100% - clamp(110px, 22vw, 190px) + 4%); } }
-  @keyframes bob { 0%, 100% { margin-top: 0; } 50% { margin-top: -10px; } }
+  @keyframes loiter {
+    0.00% { left: 50.00%; top: 9.00%; transform: translate(-50%, -50%) rotate(10.0deg); }
+    4.17% { left: 62.16%; top: 10.40%; transform: translate(-50%, -50%) rotate(9.7deg); }
+    8.33% { left: 73.50%; top: 14.49%; transform: translate(-50%, -50%) rotate(8.7deg); }
+    12.50% { left: 83.23%; top: 21.01%; transform: translate(-50%, -50%) rotate(7.1deg); }
+    16.67% { left: 90.70%; top: 29.50%; transform: translate(-50%, -50%) rotate(5.0deg); }
+    20.83% { left: 95.40%; top: 39.39%; transform: translate(-50%, -50%) rotate(2.6deg); }
+    25.00% { left: 97.00%; top: 50.00%; transform: translate(-50%, -50%) rotate(0.0deg); }
+    29.17% { left: 95.40%; top: 60.61%; transform: translate(-50%, -50%) rotate(-2.6deg); }
+    33.33% { left: 90.70%; top: 70.50%; transform: translate(-50%, -50%) rotate(-5.0deg); }
+    37.50% { left: 83.23%; top: 78.99%; transform: translate(-50%, -50%) rotate(-7.1deg); }
+    41.67% { left: 73.50%; top: 85.51%; transform: translate(-50%, -50%) rotate(-8.7deg); }
+    45.83% { left: 62.16%; top: 89.60%; transform: translate(-50%, -50%) rotate(-9.7deg); }
+    50.00% { left: 50.00%; top: 91.00%; transform: translate(-50%, -50%) rotate(-10.0deg); }
+    54.17% { left: 37.84%; top: 89.60%; transform: translate(-50%, -50%) rotate(-9.7deg); }
+    58.33% { left: 26.50%; top: 85.51%; transform: translate(-50%, -50%) rotate(-8.7deg); }
+    62.50% { left: 16.77%; top: 78.99%; transform: translate(-50%, -50%) rotate(-7.1deg); }
+    66.67% { left: 9.30%; top: 70.50%; transform: translate(-50%, -50%) rotate(-5.0deg); }
+    70.83% { left: 4.60%; top: 60.61%; transform: translate(-50%, -50%) rotate(-2.6deg); }
+    75.00% { left: 3.00%; top: 50.00%; transform: translate(-50%, -50%) rotate(-0.0deg); }
+    79.17% { left: 4.60%; top: 39.39%; transform: translate(-50%, -50%) rotate(2.6deg); }
+    83.33% { left: 9.30%; top: 29.50%; transform: translate(-50%, -50%) rotate(5.0deg); }
+    87.50% { left: 16.77%; top: 21.01%; transform: translate(-50%, -50%) rotate(7.1deg); }
+    91.67% { left: 26.50%; top: 14.49%; transform: translate(-50%, -50%) rotate(8.7deg); }
+    95.83% { left: 37.84%; top: 10.40%; transform: translate(-50%, -50%) rotate(9.7deg); }
+    100.00% { left: 50.00%; top: 9.00%; transform: translate(-50%, -50%) rotate(10.0deg); }
+  }
+  @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 </style>
 </head>
 <body>
   <div class="stage">
     <div class="title" id="title"></div>
-    <img class="drone" src="__DRONE__" alt="" />
+    <div class="drone-path"><div class="drone"><img src="__DRONE__" alt="" /></div></div>
   </div>
   <div class="status"><div>Someone is flying right now.</div><div class="sub">One pilot at a time. This page retries automatically.</div></div>
 <script>
@@ -364,11 +392,11 @@ WAKING_PAGE = """<!doctype html>
 <style>
   html, body { height: 100%; margin: 0; }
   body {
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 36px;
     background: #000; color: #e8e8e8; overflow: hidden;
     font-family: "Press Start 2P", ui-monospace, Menlo, monospace;
   }
-  .stage { position: relative; width: min(820px, 92vw); height: 220px; }
+  .stage { position: relative; width: min(1040px, 96vw); height: 340px; }
   .title {
     position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
     display: flex; justify-content: center; gap: 0.08em;
@@ -380,22 +408,50 @@ WAKING_PAGE = """<!doctype html>
     -webkit-background-clip: text; background-clip: text; color: transparent;
     animation: wave 1.8s ease-in-out infinite;
   }
+  .drone-path { position: absolute; inset: 0; pointer-events: none; }
   .drone {
-    position: absolute; top: 18%; width: clamp(110px, 22vw, 190px); left: 0;
-    filter: drop-shadow(0 0 10px rgba(255, 210, 58, 0.35));
-    animation: fly 6s ease-in-out infinite alternate, bob 1.2s ease-in-out infinite;
+    position: absolute; width: clamp(72px, 13vw, 124px);
+    filter: drop-shadow(0 0 8px rgba(255, 210, 58, 0.35));
+    animation: loiter 11s linear infinite;
   }
+  .drone img { display: block; width: 100%; animation: bob 1.3s ease-in-out infinite; }
   .status { font-size: clamp(10px, 2.2vw, 14px); color: #c9c9c9; letter-spacing: 0.04em; text-align: center; line-height: 1.8; }
   .sub { color: #7d7d7d; }
   @keyframes wave { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-0.18em); } }
-  @keyframes fly { from { left: -4%; } to { left: calc(100% - clamp(110px, 22vw, 190px) + 4%); } }
-  @keyframes bob { 0%, 100% { margin-top: 0; } 50% { margin-top: -10px; } }
+  @keyframes loiter {
+    0.00% { left: 50.00%; top: 9.00%; transform: translate(-50%, -50%) rotate(10.0deg); }
+    4.17% { left: 62.16%; top: 10.40%; transform: translate(-50%, -50%) rotate(9.7deg); }
+    8.33% { left: 73.50%; top: 14.49%; transform: translate(-50%, -50%) rotate(8.7deg); }
+    12.50% { left: 83.23%; top: 21.01%; transform: translate(-50%, -50%) rotate(7.1deg); }
+    16.67% { left: 90.70%; top: 29.50%; transform: translate(-50%, -50%) rotate(5.0deg); }
+    20.83% { left: 95.40%; top: 39.39%; transform: translate(-50%, -50%) rotate(2.6deg); }
+    25.00% { left: 97.00%; top: 50.00%; transform: translate(-50%, -50%) rotate(0.0deg); }
+    29.17% { left: 95.40%; top: 60.61%; transform: translate(-50%, -50%) rotate(-2.6deg); }
+    33.33% { left: 90.70%; top: 70.50%; transform: translate(-50%, -50%) rotate(-5.0deg); }
+    37.50% { left: 83.23%; top: 78.99%; transform: translate(-50%, -50%) rotate(-7.1deg); }
+    41.67% { left: 73.50%; top: 85.51%; transform: translate(-50%, -50%) rotate(-8.7deg); }
+    45.83% { left: 62.16%; top: 89.60%; transform: translate(-50%, -50%) rotate(-9.7deg); }
+    50.00% { left: 50.00%; top: 91.00%; transform: translate(-50%, -50%) rotate(-10.0deg); }
+    54.17% { left: 37.84%; top: 89.60%; transform: translate(-50%, -50%) rotate(-9.7deg); }
+    58.33% { left: 26.50%; top: 85.51%; transform: translate(-50%, -50%) rotate(-8.7deg); }
+    62.50% { left: 16.77%; top: 78.99%; transform: translate(-50%, -50%) rotate(-7.1deg); }
+    66.67% { left: 9.30%; top: 70.50%; transform: translate(-50%, -50%) rotate(-5.0deg); }
+    70.83% { left: 4.60%; top: 60.61%; transform: translate(-50%, -50%) rotate(-2.6deg); }
+    75.00% { left: 3.00%; top: 50.00%; transform: translate(-50%, -50%) rotate(-0.0deg); }
+    79.17% { left: 4.60%; top: 39.39%; transform: translate(-50%, -50%) rotate(2.6deg); }
+    83.33% { left: 9.30%; top: 29.50%; transform: translate(-50%, -50%) rotate(5.0deg); }
+    87.50% { left: 16.77%; top: 21.01%; transform: translate(-50%, -50%) rotate(7.1deg); }
+    91.67% { left: 26.50%; top: 14.49%; transform: translate(-50%, -50%) rotate(8.7deg); }
+    95.83% { left: 37.84%; top: 10.40%; transform: translate(-50%, -50%) rotate(9.7deg); }
+    100.00% { left: 50.00%; top: 9.00%; transform: translate(-50%, -50%) rotate(10.0deg); }
+  }
+  @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 </style>
 </head>
 <body>
   <div class="stage">
     <div class="title" id="title"></div>
-    <img class="drone" src="__DRONE__" alt="" />
+    <div class="drone-path"><div class="drone"><img src="__DRONE__" alt="" /></div></div>
   </div>
   <div class="status"><div id="status">Waking the server...</div><div class="sub" id="sub">This takes about 2 minutes</div></div>
 <script>
