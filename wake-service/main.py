@@ -196,8 +196,8 @@ async def _api_list(ip: str, resource: str) -> list | None:
 
 
 async def check_warm(ip: str) -> bool:
-    streamers = await _api_list(ip, "streamers")
-    return bool(streamers)
+    streamers = await _api_list(ip, "streamers") or []
+    return any(isinstance(st, dict) and st.get("streaming") for st in streamers)
 
 
 async def connected_players(ip: str) -> int:
