@@ -19,16 +19,19 @@ $InfraDir = (Resolve-Path $InfraDir).Path
 $PlayerTs = Join-Path $InfraDir "Frontend\implementations\typescript\src\player.ts"
 if (-not (Test-Path $PlayerTs)) { Fail "player.ts not found at $PlayerTs" }
 
-$Original = "new Config({ useUrlParams: true })"
-$Patched  = "new Config({ useUrlParams: true, initialSettings: { HoveringMouse: true } })"
+$Patched = "new Config({ useUrlParams: true, initialSettings: { HoveringMouse: true, AutoConnect: true, AutoPlayVideo: true, StartVideoMuted: true } })"
+$KnownSources = @(
+    "new Config({ useUrlParams: true })",
+    "new Config({ useUrlParams: true, initialSettings: { HoveringMouse: true } })"
+)
 $Source = Get-Content $PlayerTs -Raw
 if ($Source.Contains($Patched)) {
-    Write-Host "player.ts already defaults to hovering mouse."
-} elseif ($Source.Contains($Original)) {
-    Set-Content -Path $PlayerTs -Value $Source.Replace($Original, $Patched) -NoNewline -Encoding utf8
-    Write-Host "player.ts patched: hovering mouse is the default control scheme."
+    Write-Host "player.ts already has the hosted defaults."
 } else {
-    Fail "player.ts no longer contains '$Original'; the frontend changed upstream and the patch must be updated."
+    $Match = $KnownSources | Where-Object { $Source.Contains($_) } | Select-Object -First 1
+    if (-not $Match) { Fail "player.ts has no known Config line; the frontend changed upstream and the patch must be updated." }
+    Set-Content -Path $PlayerTs -Value $Source.Replace($Match, $Patched) -NoNewline -Encoding utf8
+    Write-Host "player.ts patched: hovering mouse, auto-connect, muted autoplay."
 }
 
 $SetupBat = Join-Path $InfraDir "SignallingWebServer\platform_scripts\cmd\setup.bat"

@@ -18,6 +18,8 @@ EC2_INSTANCE_ID = os.environ["EC2_INSTANCE_ID"]
 EC2_APP_PORT = int(os.environ.get("EC2_APP_PORT", "80"))
 IDLE_STOP_MINUTES = float(os.environ.get("IDLE_STOP_MINUTES", "0"))
 WARM_CHECK_TIMEOUT_S = float(os.environ.get("WARM_CHECK_TIMEOUT_S", "4"))
+REVEAL_DELAY_MS = int(os.environ.get("REVEAL_DELAY_MS", "5000"))
+OVERLAY_FALLBACK_MS = int(os.environ.get("OVERLAY_FALLBACK_MS", "25000"))
 IDLE_CHECK_INTERVAL_S = 60
 START_DEBOUNCE_S = 20
 READY_STATUS_TTL_S = 5
@@ -292,6 +294,107 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+OVERLAY_SNIPPET = """
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+<style>
+  #dc-overlay {
+    position: fixed; inset: 0; z-index: 2147483647; background: #000; color: #e8e8e8;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 36px;
+    font-family: "Press Start 2P", ui-monospace, Menlo, monospace; overflow: hidden;
+    transition: opacity 0.6s ease;
+  }
+  #dc-overlay .dc-stage { position: relative; width: min(1040px, 96vw); height: 340px; }
+  #dc-overlay .dc-title {
+    position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+    display: flex; justify-content: center; gap: 0.08em; font-size: clamp(28px, 7vw, 64px);
+  }
+  #dc-overlay .dc-title span {
+    display: inline-block;
+    background: linear-gradient(#fff6b0 0%, #ffd23a 35%, #f0a400 65%, #b86b00 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: dc-wave 1.8s ease-in-out infinite;
+  }
+  #dc-overlay .dc-drone {
+    position: absolute; width: clamp(72px, 13vw, 124px);
+    filter: drop-shadow(0 0 8px rgba(255, 210, 58, 0.35));
+    animation: dc-loiter 11s linear infinite;
+  }
+  #dc-overlay .dc-drone img { display: block; width: 100%; animation: dc-bob 1.3s ease-in-out infinite; }
+  #dc-overlay .dc-status { font-size: clamp(10px, 2.2vw, 14px); color: #c9c9c9; letter-spacing: 0.04em; text-align: center; line-height: 1.8; }
+  #dc-overlay .dc-sub { color: #7d7d7d; }
+  @keyframes dc-wave { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-0.18em); } }
+  @keyframes dc-loiter {
+    0.00% { left: 50.00%; top: 9.00%; transform: translate(-50%, -50%) rotate(10.0deg); }
+    4.17% { left: 62.16%; top: 10.40%; transform: translate(-50%, -50%) rotate(9.7deg); }
+    8.33% { left: 73.50%; top: 14.49%; transform: translate(-50%, -50%) rotate(8.7deg); }
+    12.50% { left: 83.23%; top: 21.01%; transform: translate(-50%, -50%) rotate(7.1deg); }
+    16.67% { left: 90.70%; top: 29.50%; transform: translate(-50%, -50%) rotate(5.0deg); }
+    20.83% { left: 95.40%; top: 39.39%; transform: translate(-50%, -50%) rotate(2.6deg); }
+    25.00% { left: 97.00%; top: 50.00%; transform: translate(-50%, -50%) rotate(0.0deg); }
+    29.17% { left: 95.40%; top: 60.61%; transform: translate(-50%, -50%) rotate(-2.6deg); }
+    33.33% { left: 90.70%; top: 70.50%; transform: translate(-50%, -50%) rotate(-5.0deg); }
+    37.50% { left: 83.23%; top: 78.99%; transform: translate(-50%, -50%) rotate(-7.1deg); }
+    41.67% { left: 73.50%; top: 85.51%; transform: translate(-50%, -50%) rotate(-8.7deg); }
+    45.83% { left: 62.16%; top: 89.60%; transform: translate(-50%, -50%) rotate(-9.7deg); }
+    50.00% { left: 50.00%; top: 91.00%; transform: translate(-50%, -50%) rotate(-10.0deg); }
+    54.17% { left: 37.84%; top: 89.60%; transform: translate(-50%, -50%) rotate(-9.7deg); }
+    58.33% { left: 26.50%; top: 85.51%; transform: translate(-50%, -50%) rotate(-8.7deg); }
+    62.50% { left: 16.77%; top: 78.99%; transform: translate(-50%, -50%) rotate(-7.1deg); }
+    66.67% { left: 9.30%; top: 70.50%; transform: translate(-50%, -50%) rotate(-5.0deg); }
+    70.83% { left: 4.60%; top: 60.61%; transform: translate(-50%, -50%) rotate(-2.6deg); }
+    75.00% { left: 3.00%; top: 50.00%; transform: translate(-50%, -50%) rotate(-0.0deg); }
+    79.17% { left: 4.60%; top: 39.39%; transform: translate(-50%, -50%) rotate(2.6deg); }
+    83.33% { left: 9.30%; top: 29.50%; transform: translate(-50%, -50%) rotate(5.0deg); }
+    87.50% { left: 16.77%; top: 21.01%; transform: translate(-50%, -50%) rotate(7.1deg); }
+    91.67% { left: 26.50%; top: 14.49%; transform: translate(-50%, -50%) rotate(8.7deg); }
+    95.83% { left: 37.84%; top: 10.40%; transform: translate(-50%, -50%) rotate(9.7deg); }
+    100.00% { left: 50.00%; top: 9.00%; transform: translate(-50%, -50%) rotate(10.0deg); }
+  }
+  @keyframes dc-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+</style>
+<div id="dc-overlay">
+  <div class="dc-stage">
+    <div class="dc-title" id="dc-title"></div>
+    <div class="dc-drone"><img src="__DRONE__" alt="" /></div>
+  </div>
+  <div class="dc-status"><div>Connecting to the game...</div><div class="dc-sub">Click the stream once it appears to turn on sound</div></div>
+</div>
+<script>
+(function () {
+  const overlay = document.getElementById("dc-overlay");
+  const title = document.getElementById("dc-title");
+  [..."STARTING..."].forEach((ch, i) => {
+    const s = document.createElement("span");
+    s.textContent = ch;
+    s.style.animationDelay = (i * 0.12) + "s";
+    title.appendChild(s);
+  });
+  let hidden = false;
+  function hide(delayMs) {
+    if (hidden) return;
+    hidden = true;
+    setTimeout(() => {
+      overlay.style.opacity = "0";
+      setTimeout(() => overlay.remove(), 700);
+    }, delayMs);
+  }
+  function hook() {
+    const ps = window.pixelStreaming;
+    if (!ps || !ps.addEventListener) { setTimeout(hook, 100); return; }
+    ps.addEventListener("playStream", () => hide(__REVEAL_DELAY_MS__));
+    ps.addEventListener("playStreamRejected", () => hide(0));
+  }
+  hook();
+  setTimeout(() => hide(0), __FALLBACK_MS__);
+  function unmute() {
+    document.querySelectorAll("video, audio").forEach((m) => { m.muted = false; });
+  }
+  document.addEventListener("pointerdown", unmute, true);
+  document.addEventListener("keydown", unmute, true);
+})();
+</script>
+"""
+
 with open(DRONE_PNG_PATH, "rb") as _f:
     DRONE_DATA_URI = "data:image/png;base64," + base64.b64encode(_f.read()).decode()
 
@@ -532,6 +635,20 @@ async def _proxy_http(request: Request, path: str) -> Response:
     )
 
 
+async def _player_page_with_overlay(ip: str, path: str, query: str) -> str | None:
+    url = f"http://{ip}:{EC2_APP_PORT}/{path}" + (f"?{query}" if query else "")
+    try:
+        r = await _state["client"].get(url, headers={"accept-encoding": "identity"})
+    except httpx.HTTPError:
+        return None
+    if r.status_code != 200 or "</body>" not in r.text:
+        return None
+    snippet = (OVERLAY_SNIPPET.replace("__DRONE__", DRONE_DATA_URI)
+               .replace("__REVEAL_DELAY_MS__", str(REVEAL_DELAY_MS))
+               .replace("__FALLBACK_MS__", str(OVERLAY_FALLBACK_MS)))
+    return r.text.replace("</body>", snippet + "</body>", 1)
+
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
 async def proxy_http(request: Request, path: str):
     _state["last_activity"] = time.time()
@@ -551,6 +668,9 @@ async def proxy_http(request: Request, path: str):
     if accepts_html and request.method == "GET" and path in ("", "player.html"):
         if await connected_players(status["ip"]) > 0:
             return HTMLResponse(BUSY_PAGE.replace("__DRONE__", DRONE_DATA_URI), status_code=503, headers={"Retry-After": "15"})
+        page = await _player_page_with_overlay(status["ip"], path, request.url.query)
+        if page is not None:
+            return HTMLResponse(page, headers={"Cache-Control": "no-store"})
 
     return await _proxy_http(request, path)
 
