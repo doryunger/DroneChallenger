@@ -59,7 +59,13 @@ if (Test-Path $ConfigFile) {
 if (-not $Config.TurnUser -or -not $Config.TurnPass) { Fail "$ConfigFile must define TurnUser and TurnPass." }
 
 if ((Test-PortListening $StreamerPort) -or (Test-PortListening $PlayerPort)) {
-    Fail "Port $StreamerPort or $PlayerPort is already in use. Stop the running signalling server first."
+    Write-Log "Ports $StreamerPort/$PlayerPort held by a previous run; stopping the leftover processes."
+    Get-Process -Name "DroneChallenger*", "turnserver" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Stop-PortOwners @($StreamerPort, $PlayerPort, 8889)
+    Start-Sleep -Seconds 3
+    if ((Test-PortListening $StreamerPort) -or (Test-PortListening $PlayerPort)) {
+        Fail "Port $StreamerPort or $PlayerPort is still in use by another program."
+    }
 }
 
 if ($PublicIp -eq "auto") {

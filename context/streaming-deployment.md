@@ -41,3 +41,14 @@ Pitfalls found on the first EC2 deployment:
 ## Autostart
 
 `register_autostart.ps1` registers the scheduled task `DroneChallengerStreaming`, which runs `start_streaming.ps1 -PublicIp auto -StartTurn` as SYSTEM at every boot, with no time limit and up to three restarts on failure. No interactive login or RDP session is needed: the game renders off-screen on the GPU in the non-interactive session, which was verified on the T4. From instance start to a connected streamer takes about 1 minute 40 seconds. `start_streaming.ps1` retries the instance-metadata lookup for up to three minutes because the network may not be ready when the task fires. `register_autostart.ps1 -Remove` deletes the task.
+
+## Session limits (auto-stop)
+
+`session_guard.ps1` runs as a second boot task (`DroneChallengerSessionGuard`) and shuts Windows down, which stops the EC2 instance (EBS-backed instances stop on an OS-initiated shutdown; no IAM permission is needed). It checks every 30 seconds:
+
+- **Uptime cap**: 20 minutes after boot. Boot plus game start takes about 2 minutes, so a session gets roughly 18 minutes of play, enough for one full 10-minute round.
+- **Idle limit**: 10 minutes without a connected player, counted from boot.
+
+A player is "connected" while a remote address holds an established TCP connection to the player port (80). The player page keeps a websocket open for the whole stream; page loads only add short-lived connections. Both limits are parameters of `register_autostart.ps1` (`-IdleMinutes`, `-MaxUptimeMinutes`) and are logged to `logs/session_guard.log`.
+
+Re-registering the tasks while they run ends their processes (Windows terminates a replaced task), so `register_autostart.ps1` restarts any task that was running, and `start_streaming.ps1` stops leftover processes still holding its ports from a previous run.
