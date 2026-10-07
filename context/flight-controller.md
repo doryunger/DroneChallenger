@@ -75,9 +75,18 @@ Physically, direction-of-correction is undefined exactly at the pole (same as "w
 
 ## Input capture: raw key polling instead of Enhanced Input events
 
-`ControlInput.Roll` and `ControlInput.Throttle` are recomputed from `PlayerController::IsInputKeyDown` every `Tick` (D/A for Roll, W/S for Throttle) instead of being set by Enhanced Input `Triggered`/`Completed` callbacks. Enhanced Input's `Completed` event is not guaranteed to fire on every key-up transition (overlapping opposite-key presses, focus loss during key-up, etc.); when it doesn't, the axis's control value is never reset and stays latched at whatever the last `Triggered` call set it to — the drone gets stuck mid-maneuver on that axis with no way to recover, since nothing else ever writes to it. Polling raw key state fresh every tick is self-healing: it can't latch because it never depends on an event being delivered.
+All four control axes are recomputed from `PlayerController::IsInputKeyDown` every `Tick` instead of being set by Enhanced Input `Triggered`/`Completed` callbacks:
 
-Yaw and Pitch still use the Enhanced Input `Triggered`/`Completed` pattern (`IA_Yaw`, `IA_PitchRoll`) and have not shown this symptom. If they ever do, apply the same fix: read the bound physical keys directly via `IsInputKeyDown` in `Tick` instead of trusting the `Completed` event.
+| Axis     | -1    | +1    |
+|----------|-------|-------|
+| Throttle | S     | W     |
+| Roll     | A     | D     |
+| Pitch    | Up    | Down  |
+| Yaw      | Q     | E     |
+
+Enhanced Input's `Completed` event is not guaranteed to fire on every key-up transition (overlapping opposite-key presses, focus loss during key-up, etc.); when it doesn't, the axis's control value is never reset and stays latched at whatever the last `Triggered` call set it to. Polling raw key state fresh every tick is self-healing: it can't latch because it never depends on an event being delivered.
+
+Pitch and yaw were moved to polling after the UE 5.8 upgrade: with `IMC_Drone` registered, the bindings in place and the keys reported as down by the PlayerController, the `IA_PithRoll` and `IA_Yaw` callbacks never fired. `IA_Throttle`, `IA_PithRoll` and `IA_Yaw` remain referenced and mapped in `IMC_Drone` but are not bound. Gamepad axes from the IMC are therefore not used for flight. `IA_SwitchCamera` (C) is still bound through Enhanced Input.
 
 ## Input pipeline
 

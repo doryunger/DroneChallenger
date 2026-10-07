@@ -44,3 +44,7 @@ Cesium `SampleHeightMostDetailed` returns height above the WGS84 ellipsoid, not 
 ## Munich anchor
 
 Marienplatz: 48.1374° N, 11.5755° E. All testing and positioning is done within 2 km of this point.
+
+## World bounds checks
+
+`ADroneGameMode::BeginPlay` sets `AWorldSettings::bEnableWorldBoundsChecks = false`, as Cesium for Unreal recommends for georeferenced worlds. Unreal's KillZ / HALF_WORLD_MAX destruction is therefore inactive in the Munich map; crashes and out-of-area conditions are handled by the game's own logic (`ADroneGameMode::NotifyCrash`), never by engine bounds.

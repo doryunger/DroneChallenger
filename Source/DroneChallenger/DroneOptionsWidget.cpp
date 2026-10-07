@@ -5,7 +5,6 @@
 #include "Kismet/GameplayStatics.h"
 #include "HAL/PlatformMisc.h"
 
-// ── 5×7 pixel glyphs (bit 4 = leftmost pixel) ────────────────────────────────
 struct FOGlyph { uint8 Rows[7]; };
 
 static const FOGlyph OG_A = {{ 14, 17, 17, 31, 17, 17, 17 }};
@@ -67,8 +66,6 @@ static void SlateBox_Opt(const FGeometry& Geom, FSlateWindowElementList& Out, in
         FCoreStyle::Get().GetBrush(TEXT("WhiteBrush")), ESlateDrawEffect::None, Col);
 }
 
-// ── helpers ───────────────────────────────────────────────────────────────────
-
 float UDroneOptionsWidget::PixelWordWidth(const FString& Word, float PW)
 {
     if (Word.IsEmpty()) return 0.f;
@@ -98,11 +95,22 @@ void UDroneOptionsWidget::DrawPixelWord(
     ++Layer;
 }
 
-// ── public API ────────────────────────────────────────────────────────────────
-
 bool UDroneOptionsWidget::IsShowing() const
 {
     return State != EState::Hidden;
+}
+
+bool UDroneOptionsWidget::IsHostedSession()
+{
+    FString ConnectionURL;
+    return FParse::Value(FCommandLine::Get(), TEXT("PixelStreamingConnectionURL="), ConnectionURL)
+        || FParse::Value(FCommandLine::Get(), TEXT("PixelStreamingURL="), ConnectionURL);
+}
+
+void UDroneOptionsWidget::NativeOnInitialized()
+{
+    Super::NativeOnInitialized();
+    bAllowQuit = !IsHostedSession();
 }
 
 bool UDroneOptionsWidget::NativeSupportsKeyboardFocus() const
@@ -135,8 +143,6 @@ void UDroneOptionsWidget::Hide()
     State = EState::FadingOut;
 }
 
-// ── tick / input ──────────────────────────────────────────────────────────────
-
 void UDroneOptionsWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
@@ -163,8 +169,10 @@ void UDroneOptionsWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 
             if (APlayerController* PC = GetOwningPlayer())
             {
-                PC->SetInputMode(FInputModeGameOnly());
-                PC->SetShowMouseCursor(false);
+                FInputModeGameAndUI GameMode;
+                GameMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+                PC->SetInputMode(GameMode);
+                PC->SetShowMouseCursor(true);
             }
         }
     }
@@ -202,7 +210,7 @@ FReply UDroneOptionsWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry,
         ExecuteMainMenu();
         return FReply::Handled();
     }
-    if (P.X >= ExitMin.X && P.X <= ExitMax.X && P.Y >= ExitMin.Y && P.Y <= ExitMax.Y)
+    if (bAllowQuit && P.X >= ExitMin.X && P.X <= ExitMax.X && P.Y >= ExitMin.Y && P.Y <= ExitMax.Y)
     {
         ExecuteExit();
         return FReply::Handled();
@@ -215,7 +223,7 @@ FCursorReply UDroneOptionsWidget::NativeOnCursorQuery(const FGeometry& InGeometr
     const FVector2D P = InGeometry.AbsoluteToLocal(InCursorEvent.GetScreenSpacePosition());
     if ((P.X >= RestartMin.X && P.X <= RestartMax.X && P.Y >= RestartMin.Y && P.Y <= RestartMax.Y) ||
         (P.X >= MenuMin.X && P.X <= MenuMax.X && P.Y >= MenuMin.Y && P.Y <= MenuMax.Y) ||
-        (P.X >= ExitMin.X && P.X <= ExitMax.X && P.Y >= ExitMin.Y && P.Y <= ExitMax.Y))
+        (bAllowQuit && P.X >= ExitMin.X && P.X <= ExitMax.X && P.Y >= ExitMin.Y && P.Y <= ExitMax.Y))
         return FCursorReply::Cursor(EMouseCursor::Hand);
     return FCursorReply::Cursor(EMouseCursor::Default);
 }
@@ -226,8 +234,6 @@ void UDroneOptionsWidget::NativeOnFocusLost(const FFocusEvent& InFocusEvent)
     if (State == EState::FadingIn || State == EState::Visible)
         SetFocus();
 }
-
-// ── paint ─────────────────────────────────────────────────────────────────────
 
 int32 UDroneOptionsWidget::NativePaint(
     const FPaintArgs& Args, const FGeometry& AllottedGeometry,
@@ -242,12 +248,10 @@ int32 UDroneOptionsWidget::NativePaint(
     const float H = Size.Y;
     const float S = FMath::Min(W, H);
 
-    // dim overlay
     SlateBox_Opt(AllottedGeometry, OutDrawElements, LayerId,
         0.f, 0.f, W, H, FLinearColor(0.f, 0.f, 0.f, FadeAlpha * 0.72f));
     ++LayerId;
 
-    // dialog box
     const float DW  = W * 0.48f;
     const float DH  = H * 0.54f;
     const float DX  = (W - DW) * 0.5f;
@@ -265,7 +269,6 @@ int32 UDroneOptionsWidget::NativePaint(
     SlateBox_Opt(AllottedGeometry, OutDrawElements, LayerId, DX + DW - Bdr,  DY,              Bdr, DH,  GoldBdr);
     ++LayerId;
 
-    // title
     const FString Title  = TEXT("OPTIONS");
     const float TitlePW  = FMath::Max(3.f, FMath::Floor(DW * 0.80f / (Title.Len() * 6.f)));
     const float TitleW   = PixelWordWidth(Title, TitlePW);
@@ -274,14 +277,12 @@ int32 UDroneOptionsWidget::NativePaint(
     const float TitleY   = DY + DH * 0.07f;
     DrawPixelWord(AllottedGeometry, OutDrawElements, LayerId, Title, TitleX, TitleY, TitlePW, FadeAlpha);
 
-    // divider
     const float DivY = TitleY + TitleH + TitlePW * 2.f;
     SlateBox_Opt(AllottedGeometry, OutDrawElements, LayerId,
         DX + Bdr, DivY, DW - Bdr * 2.f, FMath::Max(1.f, S * 0.0018f),
         FLinearColor(0.52f, 0.30f, 0.01f, FadeAlpha * 0.65f));
     ++LayerId;
 
-    // option layout — entries centered in area below divider, with explicit gap
     const float OptPW     = FMath::Max(2.f, FMath::Floor(TitlePW * 0.30f));
     const float OptH      = 7.f * OptPW;
     const float OptPadX   = OptPW * 5.f;
@@ -299,7 +300,8 @@ int32 UDroneOptionsWidget::NativePaint(
 
     const float EntryH   = OptH + OptPadY * 2.f;
     const float EntryGap = S * 0.04f;
-    const float TotalH   = 3.f * EntryH + 2.f * EntryGap;
+    const float NumEntries = bAllowQuit ? 3.f : 2.f;
+    const float TotalH   = NumEntries * EntryH + (NumEntries - 1.f) * EntryGap;
     const float StartY   = AreaTop + (AreaBot - AreaTop - TotalH) * 0.5f;
 
     const float Entry0Top = StartY;
@@ -313,7 +315,6 @@ int32 UDroneOptionsWidget::NativePaint(
     const float Opt2X  = DX + (DW - Opt2W) * 0.5f;
     const float Opt2Y  = Entry2Top + OptPadY;
 
-    // update mutable hit rects and hover state
     RestartMin = FVector2D(Opt0X - OptPadX, Entry0Top);
     RestartMax = FVector2D(Opt0X + Opt0W + OptPadX, Entry0Top + EntryH);
     MenuMin = FVector2D(Opt1X - OptPadX, Entry1Top);
@@ -325,10 +326,9 @@ int32 UDroneOptionsWidget::NativePaint(
                       MousePos.Y >= RestartMin.Y && MousePos.Y <= RestartMax.Y;
     bMenuHovered = MousePos.X >= MenuMin.X && MousePos.X <= MenuMax.X &&
                    MousePos.Y >= MenuMin.Y && MousePos.Y <= MenuMax.Y;
-    bExitHovered = MousePos.X >= ExitMin.X && MousePos.X <= ExitMax.X &&
+    bExitHovered = bAllowQuit && MousePos.X >= ExitMin.X && MousePos.X <= ExitMax.X &&
                    MousePos.Y >= ExitMin.Y && MousePos.Y <= ExitMax.Y;
 
-    // hover rectangle helper
     auto DrawHoverRect = [&](FVector2D Min, FVector2D Max)
     {
         const float RW = Max.X - Min.X;
@@ -351,12 +351,11 @@ int32 UDroneOptionsWidget::NativePaint(
 
     DrawPixelWord(AllottedGeometry, OutDrawElements, LayerId, Opt0, Opt0X, Opt0Y, OptPW, FadeAlpha);
     DrawPixelWord(AllottedGeometry, OutDrawElements, LayerId, Opt1, Opt1X, Opt1Y, OptPW, FadeAlpha);
-    DrawPixelWord(AllottedGeometry, OutDrawElements, LayerId, Opt2, Opt2X, Opt2Y, OptPW, FadeAlpha);
+    if (bAllowQuit)
+        DrawPixelWord(AllottedGeometry, OutDrawElements, LayerId, Opt2, Opt2X, Opt2Y, OptPW, FadeAlpha);
 
     return LayerId;
 }
-
-// ── actions ───────────────────────────────────────────────────────────────────
 
 void UDroneOptionsWidget::ExecuteRestart()
 {
@@ -373,6 +372,7 @@ void UDroneOptionsWidget::ExecuteMainMenu()
 
 void UDroneOptionsWidget::ExecuteExit()
 {
+    if (!bAllowQuit) return;
     UGameplayStatics::SetGamePaused(GetWorld(), false);
     if (APlayerController* PC = GetOwningPlayer())
         PC->ConsoleCommand(TEXT("quit"));

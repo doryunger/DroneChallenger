@@ -179,16 +179,17 @@ int32 UDroneLoadingWidget::NativePaint(
     ++LayerId;
 
     const FString WaveText  = TEXT("LOADING...");
-    const float   PixelW    = FMath::Max(2.f, FMath::Floor(W * 0.55f / (WaveText.Len() * 6.f)));
+    const float   WaveLen   = static_cast<float>(FMath::Max(1, WaveText.Len()));
+    const float   PixelW    = FMath::Max(2.f, FMath::Floor(W * 0.55f / (WaveLen * 6.f)));
     const float   TotalW    = LW_WordWidth(WaveText, PixelW);
     const float   CharH     = 7.f * PixelW;
     const float   BaseX     = (W - TotalW) * 0.5f;
     const float   BaseY     = (H - CharH)  * 0.5f;
     const float   Amplitude = PixelW * 1.5f;
     const float   WaveSpeed = 1.8f;
-    const float   PhaseStep = 2.0f * UE_PI / (float)WaveText.Len();
+    const float   PhaseStep = 2.0f * UE_PI / WaveLen;
 
-    const float ShimmerCycle = (float)WaveText.Len() + 6.f;
+    const float ShimmerCycle = WaveLen + 6.f;
     const float ShimmerPos   = FMath::Fmod(ElapsedTime * 3.f, ShimmerCycle) - 3.f;
 
     float CurX = BaseX;
