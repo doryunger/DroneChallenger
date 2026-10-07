@@ -1,14 +1,21 @@
 #include "DroneGameMode.h"
+#include "GameFramework/WorldSettings.h"
 
 ADroneGameMode::ADroneGameMode() {}
 
 void ADroneGameMode::BeginPlay()
 {
+    if (AWorldSettings* Settings = GetWorldSettings())
+    {
+        Settings->bEnableWorldBoundsChecks = false;
+    }
     Super::BeginPlay();
 }
 
 void ADroneGameMode::StartChaseTimer()
 {
+    if (bChaseStarted) return;
+    bChaseStarted = true;
     GetWorldTimerManager().SetTimer(TimeoutHandle, this, &ADroneGameMode::OnTimeout, 10.f * 60.f, false);
 }
 
@@ -34,7 +41,7 @@ void ADroneGameMode::OnTimeout()
 
 void ADroneGameMode::EndGame(bool bWon)
 {
-    if (bGameEnded) return;
+    if (bGameEnded || !bChaseStarted) return;
     bGameEnded = true;
     GetWorldTimerManager().ClearTimer(TimeoutHandle);
     OnGameEnded.Broadcast(bWon);

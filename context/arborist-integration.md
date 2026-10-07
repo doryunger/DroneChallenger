@@ -4,13 +4,14 @@
 
 Arborist is a standalone C++20 static library (CMake). It has no UE5 coupling; it compiles and links as a pure C++ library that UBT treats as a ThirdParty module.
 
-Source lives at `Source/ThirdParty/Arborist/` (git submodule: github.com/doryunger/arborist).
+Source lives in a sibling checkout (`../arborist`, github.com/doryunger/arborist), not inside this repo.
 
-Third-party dependencies that Arborist requires:
-- `yaml-cpp` — YAML schema parsing
-- `SQLite3` — decision log persistence
+Third-party dependencies that Arborist requires (installed via vcpkg, triplet `x64-windows-static-md`):
+- `ryml` + `c4core` — YAML schema parsing
+- `sqlite3` — decision log persistence
+- `cpp-httplib[brotli]` — monitor/editor servers (`brotlienc`, `brotlidec`, `brotlicommon`)
 
-Both must be vendored as static libs under `Source/ThirdParty/` and referenced in `Build.cs`.
+`tools/setup_arborist.ps1` builds Arborist (Release, `/MD`) and populates the git-ignored `Source/ThirdParty/ArboristLib/include/` and `lib/Win64/`, which `ArboristLib.Build.cs` links. Re-run it after pulling Arborist changes.
 
 ## Key API classes
 

@@ -17,6 +17,7 @@ public:
     void NotifyWin();
 
     [[nodiscard]] bool  IsGameEnded()    const { return bGameEnded; }
+    [[nodiscard]] bool  IsChaseActive()  const { return bChaseStarted && !bGameEnded; }
     [[nodiscard]] float GetRemainingTime() const;
 
     FOnGameEnded OnGameEnded;
@@ -25,7 +26,8 @@ protected:
     virtual void BeginPlay() override;
 
 private:
-    bool         bGameEnded = false;
+    bool         bGameEnded    = false;
+    bool         bChaseStarted = false;
     FTimerHandle TimeoutHandle;
 
     void EndGame(bool bWon);

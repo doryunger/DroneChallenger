@@ -226,38 +226,8 @@ void ADroneActor::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
 		return;
 	}
 
-	if (IA_PitchRoll)
-	{
-		EIC->BindAction(IA_PitchRoll, ETriggerEvent::Triggered, this, &ADroneActor::OnPitchRoll);
-		EIC->BindAction(IA_PitchRoll, ETriggerEvent::Completed, this, &ADroneActor::OnPitchRollCompleted);
-	}
-	if (IA_Yaw)
-	{
-		EIC->BindAction(IA_Yaw, ETriggerEvent::Triggered, this, &ADroneActor::OnYaw);
-		EIC->BindAction(IA_Yaw, ETriggerEvent::Completed, this, &ADroneActor::OnYawCompleted);
-	}
 	if (IA_SwitchCamera)
 		EIC->BindAction(IA_SwitchCamera, ETriggerEvent::Started, this, &ADroneActor::OnSwitchCamera);
-}
-
-void ADroneActor::OnPitchRoll(const FInputActionValue& Value)
-{
-	ControlInput.Pitch = Value.Get<FVector2D>().X;
-}
-
-void ADroneActor::OnPitchRollCompleted(const FInputActionValue&)
-{
-	ControlInput.Pitch = 0.0f;
-}
-
-void ADroneActor::OnYaw(const FInputActionValue& Value)
-{
-	ControlInput.Yaw = Value.Get<float>();
-}
-
-void ADroneActor::OnYawCompleted(const FInputActionValue&)
-{
-	ControlInput.Yaw = 0.0f;
 }
 
 void ADroneActor::OnSwitchCamera(const FInputActionValue&)
@@ -283,6 +253,19 @@ void ADroneActor::Tick(float DeltaTime)
 		                  - (PC->IsInputKeyDown(EKeys::A) ? 1.f : 0.f);
 		ControlInput.Throttle = (PC->IsInputKeyDown(EKeys::W) ? 1.f : 0.f)
 		                      - (PC->IsInputKeyDown(EKeys::S) ? 1.f : 0.f);
+		ControlInput.Pitch = (PC->IsInputKeyDown(EKeys::Down) ? 1.f : 0.f)
+		                   - (PC->IsInputKeyDown(EKeys::Up)   ? 1.f : 0.f);
+		ControlInput.Yaw = (PC->IsInputKeyDown(EKeys::E) ? 1.f : 0.f)
+		                 - (PC->IsInputKeyDown(EKeys::Q) ? 1.f : 0.f);
+	}
+
+	if (!bPlayerHasGivenInput)
+	{
+		const ADroneGameMode* GM = GetWorld()->GetAuthGameMode<ADroneGameMode>();
+		const bool bAnyInput = ControlInput.Throttle != 0.f || ControlInput.Pitch != 0.f
+		                    || ControlInput.Roll != 0.f || ControlInput.Yaw != 0.f;
+		if (bAnyInput && (!GM || GM->IsChaseActive()))
+			bPlayerHasGivenInput = true;
 	}
 
 	const float AngVelMag = PhysicsBody->GetPhysicsAngularVelocityInDegrees().Size();
@@ -383,8 +366,10 @@ void ADroneActor::OnPhysicsHit(UPrimitiveComponent*, AActor*, UPrimitiveComponen
 void ADroneActor::NotifyCrash()
 {
 	if (bGameOver) return;
+	ADroneGameMode* GM = GetWorld()->GetAuthGameMode<ADroneGameMode>();
+	if (GM && !GM->IsChaseActive()) return;
 	bGameOver = true;
 	PhysicsBody->SetSimulatePhysics(false);
-	if (ADroneGameMode* GM = GetWorld()->GetAuthGameMode<ADroneGameMode>())
+	if (GM)
 		GM->NotifyCrash();
 }

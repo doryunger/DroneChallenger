@@ -29,6 +29,7 @@ public:
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
 	[[nodiscard]] bool IsFPVMode() const { return bFPVMode; }
+	[[nodiscard]] bool HasPlayerGivenInput() const { return bPlayerHasGivenInput; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -125,6 +126,7 @@ private:
 
 	bool bFPVMode   = false;
 	bool bGameOver  = false;
+	bool bPlayerHasGivenInput = false;
 
 	void InitHoverThrottle();
 	void ApplyRotorForces();
@@ -133,10 +135,6 @@ private:
 	void RegisterInputMappingContext(AController* InController);
 	void NotifyCrash();
 
-	void OnPitchRoll(const FInputActionValue& Value);
-	void OnPitchRollCompleted(const FInputActionValue& Value);
-	void OnYaw(const FInputActionValue& Value);
-	void OnYawCompleted(const FInputActionValue& Value);
 	void OnSwitchCamera(const FInputActionValue& Value);
 
 	UFUNCTION()

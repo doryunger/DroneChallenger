@@ -1,12 +1,12 @@
 # Drone Challenger
 
-A first-person drone simulator built on Unreal Engine 5.7 and Cesium for Unreal, set in a georeferenced recreation of Munich. Pilot an FPV drone across city area and chase down a Behavior-Tree-driven patrol car, whose live AI state is visualized in real time right next to the gameplay.
+A first-person drone simulator built on Unreal Engine 5.8 and Cesium for Unreal, set in a georeferenced recreation of Munich. Pilot an FPV drone across city area and chase down a Behavior-Tree-driven patrol car, whose live AI state is visualized in real time right next to the gameplay.
 
 <p align="center">
   <img src="assets/dc_demo.gif" alt="Drone Challenger demo">
 </p>
 
-[**▶ Play it live in your browser**](https://streams.vagon.io/streams/7d203400-fc2c-4b37-a084-cb42b4078521) — streamed via Vagon, no download or GPU required.
+[**▶ Play it live in your browser**](https://dronechallenger.stamsite.cc) — streamed with Pixel Streaming from an on-demand AWS GPU instance, no download or GPU required. The server starts on your first visit, which takes about two minutes; one pilot can fly at a time.
 
 ## Overview
 
@@ -16,7 +16,7 @@ The player flies a physically simulated FPV drone over real-world terrain stream
 
 | Layer | Technology |
 |---|---|
-| Engine | Unreal Engine 5.7 |
+| Engine | Unreal Engine 5.8 |
 | Georeferencing | Cesium for Unreal + Cesium ion |
 | Terrain data | Google Photorealistic 3D Tiles |
 | Language | C++20 (no Blueprint logic) |
@@ -26,6 +26,7 @@ The player flies a physically simulated FPV drone over real-world terrain stream
 | UI | UMG + Slate + WebBrowser plugin |
 | Behavior trees | [Arborist](https://github.com/doryunger/arborist) |
 | Road navigation | Custom graph loaded from `Content/Graph/nodes.csv` + `edges.csv` |
+| Hosting | Pixel Streaming 2 on an EC2 GPU instance that starts on demand and stops when idle (`deploy/streaming/`, `wake-service/`) |
 
 
 ## Arborist integration
@@ -80,6 +81,6 @@ Cloning this repo is **not enough on its own** to open or package the project �
 |---|---|---|
 | `Content/RealisticDroneV2/` | Marketplace asset pack, >400 MB | Own/download it via Fab and import into `Content/` |
 | `Content/PS1_Style_Hatchback_Car/` | Marketplace asset pack | Same as above |
-| `Source/ThirdParty/ArboristLib/{lib,include}/` | Prebuilt binaries, built from a separate repo | Build [Arborist](https://github.com/doryunger/arborist) yourself and copy its static lib + headers into place |
+| `Source/ThirdParty/ArboristLib/{lib,include}/` | Prebuilt binaries, built from a separate repo | Clone [Arborist](https://github.com/doryunger/arborist) next to this repo and run `tools/setup_arborist.ps1` (needs Visual Studio with C++ and CMake); it builds Arborist via vcpkg and copies the libs + headers into place |
 
 Everything else — code, the road graph, the BT schema, the HUD/viewer HTML/JS, Unreal project files — is version-controlled and builds as-is once those three are in place.

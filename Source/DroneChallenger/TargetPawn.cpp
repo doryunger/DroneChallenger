@@ -68,9 +68,6 @@ ATargetPawn::ATargetPawn()
 	Wheel3 = MakeWheelComp(TEXT("Wheel3"));
 	Wheel4 = MakeWheelComp(TEXT("Wheel4"));
 
-	// Each finder must live in its own scope so the static is a distinct variable.
-	// A shared static inside a lambda would only initialise once (the first asset path),
-	// causing all four wheels to silently load wheel1's mesh.
 	{ static ConstructorHelpers::FObjectFinder<UStaticMesh> F(TEXT("/Game/PS1_Style_Hatchback_Car/meshes/SM_hatchback_car_wheel1")); if (F.Succeeded()) Wheel1->SetStaticMesh(F.Object); }
 	{ static ConstructorHelpers::FObjectFinder<UStaticMesh> F(TEXT("/Game/PS1_Style_Hatchback_Car/meshes/SM_hatchback_car_wheel2")); if (F.Succeeded()) Wheel2->SetStaticMesh(F.Object); }
 	{ static ConstructorHelpers::FObjectFinder<UStaticMesh> F(TEXT("/Game/PS1_Style_Hatchback_Car/meshes/SM_hatchback_car_wheel3")); if (F.Succeeded()) Wheel3->SetStaticMesh(F.Object); }
@@ -131,9 +128,6 @@ void ATargetPawn::BeginPlay()
 
 	bDemoMode = FParse::Param(FCommandLine::Get(), TEXT("demo"));
 
-	// Force these regardless of any per-instance override the placed level actor might carry --
-	// all EditAnywhere, so a level-serialized value would otherwise silently take precedence
-	// over the class defaults above.
 	PatrolSpeed   = 300.0f;
 	EvadeSpeed    = 300.0f;
 	CaptureRadius = 500.0f;
@@ -298,7 +292,6 @@ void ATargetPawn::Tick(float DeltaTime)
 			CarPos.Z, LonLatH.X, LonLatH.Y, LonLatH.Z, DistToDrone);
 	}
 
-	// Push live state to HUD server every frame regardless of placement
 	if (HUDServer && CachedDrone)
 	{
 		const FVector DronePos = CachedDrone->GetActorLocation();
@@ -330,19 +323,13 @@ void ATargetPawn::Tick(float DeltaTime)
 	if (!bPlacementDone || !Tree) return;
 
 	ADroneGameMode* GM = GetWorld()->GetAuthGameMode<ADroneGameMode>();
-	const bool bGameEnded = GM && GM->IsGameEnded();
+	const bool bChaseActive = GM && GM->IsChaseActive();
 
 	LastDeltaTime = DeltaTime;
 	UpdateDroneState();
 
-	if (!bGameEnded)
+	if (bChaseActive)
 	{
-		if (!bDroneHasEverMoved && CachedDrone &&
-		    CachedDrone->GetVelocity().SizeSquared() > 500.f)
-		{
-			bDroneHasEverMoved = true;
-		}
-
 		if (bDroneHasEverMoved)
 		{
 			if (bDroneInFOV) {
@@ -580,23 +567,6 @@ void ATargetPawn::UpdateDroneState()
 	const FVector CarPos3D   = GetActorLocation();
 	const FVector DronePos3D = CachedDrone->GetActorLocation();
 
-	// 3D capture range (full distance including altitude) -- computed unconditionally, before
-	// any FOV/heading pre-filter below. Bug found: this used to be computed *after* the angular
-	// pre-filter, which force-set bDroneInCaptureRange = false whenever the drone's own nose
-	// wasn't pointed toward the car -- meaning physically closing to within CaptureRadius while
-	// hovering (e.g. almost directly above the car, the natural way to get very close) could
-	// silently never register as capture range at all, no matter how close the drone actually
-	// got, unless its heading happened to also satisfy the FOV cone. Physically "tagging" the
-	// car by proximity should never depend on which way the drone happens to be facing --
-	// that heading/FOV requirement is specifically about sustained *visual tracking*
-	// (bDroneInFOV, the 30s tracking-time win below), a separate and narrower condition.
-	// Distance is measured to the nearest point on the car's actual mesh bounding box, not to
-	// its origin -- treating the car as a single point ignored its physical size entirely, so
-	// hovering right above the roof/hood/trunk (any part of the car other than exactly over its
-	// pivot) still measured several meters "away" even while visually touching it. Mesh->Bounds
-	// is the real, already-scaled, already-positioned world-space box, then further exaggerated
-	// by CaptureBoxExpansionCm in every direction (tunable in-editor) so vicinity keeps triggering
-	// more generously than the literal mesh geometry alone would allow.
 	const FBox    CarBox      = Mesh->Bounds.GetBox().ExpandBy(CaptureBoxExpansionCm);
 	const FVector NearestOnCar(
 		FMath::Clamp(DronePos3D.X, CarBox.Min.X, CarBox.Max.X),
@@ -604,10 +574,15 @@ void ATargetPawn::UpdateDroneState()
 		FMath::Clamp(DronePos3D.Z, CarBox.Min.Z, CarBox.Max.Z));
 
 	const float Dist3D = FVector::Distance(NearestOnCar, DronePos3D);
-	bDroneInCaptureRange = (Dist3D <= CaptureRadius);
+	const bool bPhysicallyInRange = (Dist3D <= CaptureRadius);
 
-	// 2D pre-filter — XY plane only, skips the expensive LineTraces when the
-	// car is clearly outside the detection cone. Capture range above is unaffected.
+	if (!bDroneHasEverMoved && CachedDrone->HasPlayerGivenInput())
+		bDroneHasEverMoved = true;
+	if (!bCaptureArmed && bDroneHasEverMoved && !bPhysicallyInRange)
+		bCaptureArmed = true;
+
+	bDroneInCaptureRange = bCaptureArmed && bPhysicallyInRange;
+
 	const float Dist2D = FMath::Sqrt(
 		FMath::Square(NearestOnCar.X - DronePos3D.X) +
 		FMath::Square(NearestOnCar.Y - DronePos3D.Y));
@@ -625,9 +600,6 @@ void ATargetPawn::UpdateDroneState()
 	const FVector2D  DirToCar2D  = FVector2D(CarPos3D.X - DronePos3D.X, CarPos3D.Y - DronePos3D.Y).GetSafeNormal();
 	const float      HalfFovCos  = FMath::Cos(FMath::DegreesToRadians(DetectionFovDeg * 0.5f));
 
-	// Only apply the angular pre-filter when the drone has a meaningful horizontal
-	// heading component; otherwise skip it and let the 3D check decide. Capture range above is
-	// unaffected by this filter -- only LOS/FOV (tracking-time) are gated on it.
 	const bool bApplyAngle = !DroneFwd2D.IsNearlyZero(0.1f);
 	if (bApplyAngle && FVector2D::DotProduct(DroneFwd2D, DirToCar2D) < HalfFovCos)
 	{
@@ -637,7 +609,6 @@ void ATargetPawn::UpdateDroneState()
 		return;
 	}
 
-	// Line-of-sight — three traces at different car heights, stops at first clear.
 	FCollisionQueryParams LOSParams(NAME_None, false, this);
 	LOSParams.AddIgnoredActor(CachedDrone);
 	const FVector DroneTrace = DronePos3D + FVector(0.0f, 0.0f, 100.0f);
@@ -674,6 +645,17 @@ bool ATargetPawn::ComputeDroneInFOV() const
 	return FVector::DotProduct(DroneFwd, DroneToCar) >= HalfFovCos;
 }
 
+bool ATargetPawn::IsInCaptureZone(const FVector& CarPos, const FVector& Point) const
+{
+	static constexpr float SpawnCaptureMarginCm = 500.0f;
+
+	const FVector Center = CarPos + (Mesh->Bounds.Origin - GetActorLocation());
+	const FVector Extent = Mesh->Bounds.BoxExtent + FVector(CaptureBoxExpansionCm);
+	const FBox    Zone(Center - Extent, Center + Extent);
+
+	return Zone.ComputeSquaredDistanceToPoint(Point) <= FMath::Square(CaptureRadius + SpawnCaptureMarginCm);
+}
+
 bool ATargetPawn::PlaceDroneNearCar(const FVector& CarPos, const FVector& CarForward)
 {
 	if (!IsValid(CachedDrone)) return false;
@@ -699,7 +681,7 @@ bool ATargetPawn::PlaceDroneNearCar(const FVector& CarPos, const FVector& CarFor
 	};
 
 	static constexpr float Heights[]   = { 1500.f, 3000.f, 5000.f, 8000.f, 12000.f };
-	static constexpr float Distances[] = { 3000.f, 2000.f, 1000.f, 0.f };
+	static constexpr float Distances[] = { 3000.f, 4500.f, 6000.f, 2000.f, 1000.f, 0.f };
 
 	const FVector CarRight = FVector::CrossProduct(FVector::UpVector, CarForward).GetSafeNormal();
 	const FVector Directions[] = { -CarForward, CarRight, -CarRight };
@@ -715,7 +697,7 @@ bool ATargetPawn::PlaceDroneNearCar(const FVector& CarPos, const FVector& CarFor
 			{
 				const FVector Candidate = CarPos + Dir * Dist + FVector(0.f, 0.f, Height);
 
-				if (IsClear(Candidate))
+				if (!IsInCaptureZone(CarPos, Candidate) && IsClear(Candidate))
 				{
 					Best    = Candidate;
 					bPlaced = true;
@@ -864,13 +846,10 @@ void ATargetPawn::TryInitialPlacement()
 
 	if (bDemoMode)
 	{
-		// Sorted by ascending distance from DroneEditorPos (closest candidate first) so demo
-		// runs are deterministic and always land on the same starting node/car position.
 		Candidates.Sort([](const TPair<float, int32>& A, const TPair<float, int32>& B) { return A.Key < B.Key; });
 	}
 	else
 	{
-		// Fisher-Yates shuffle -- original behavior, random starting node/car position each run.
 		for (int32 i = Candidates.Num() - 1; i > 0; --i)
 			Candidates.Swap(i, FMath::RandRange(0, i));
 	}
@@ -985,15 +964,12 @@ bool ATargetPawn::ShouldAcceptAltitude(float CandidateZ)
 		return true;
 	}
 
-	// Sharp change — check if the whole recent history agrees with this trend.
-	// If history is short, defer: store the candidate but don't move yet.
 	if (AltitudeHistory.Num() < AltHistorySize)
 	{
 		AltitudeHistory.Add(CandidateZ);
 		return false;
 	}
 
-	// Sustained trend: every sample in history moved in the same direction.
 	const bool bAllUp   = AltitudeHistory.Last() > AltitudeHistory[0] + AltSpikeThreshold;
 	const bool bAllDown = AltitudeHistory.Last() < AltitudeHistory[0] - AltSpikeThreshold;
 
@@ -1004,7 +980,6 @@ bool ATargetPawn::ShouldAcceptAltitude(float CandidateZ)
 		return true;
 	}
 
-	// Isolated spike — reject, keep history stable.
 	return false;
 }
 
@@ -1085,7 +1060,6 @@ void ATargetPawn::AdvanceAlongPath()
 	if (!Tangent.IsNearlyZero())
 		SetActorRotation(Tangent.Rotation());
 }
-
 
 void ATargetPawn::AdvanceAlongGraph()
 {

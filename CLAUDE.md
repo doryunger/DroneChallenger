@@ -2,7 +2,7 @@
 
 ## Project overview
 
-A small drone simulator built with **Unreal Engine 5.7.4** and the **Cesium for Unreal** plugin. The simulator places a controllable drone in a georeferenced world, with realistic flight physics and terrain streaming from Cesium ion via Google Photorealistic 3D Tiles.
+A small drone simulator built with **Unreal Engine 5.8.3** and the **Cesium for Unreal** plugin. The simulator places a controllable drone in a georeferenced world, with realistic flight physics and terrain streaming from Cesium ion via Google Photorealistic 3D Tiles.
 
 ## Playground definition
 
