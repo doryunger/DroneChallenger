@@ -6,7 +6,7 @@ A first-person drone simulator built on Unreal Engine 5.8 and Cesium for Unreal,
   <img src="assets/dc_demo.gif" alt="Drone Challenger demo">
 </p>
 
-[**▶ Play it live in your browser**](https://streams.vagon.io/streams/7d203400-fc2c-4b37-a084-cb42b4078521) — streamed via Vagon, no download or GPU required.
+[**▶ Play it live in your browser**](https://dronechallenger.stamsite.cc) — streamed with Pixel Streaming from an on-demand AWS GPU instance, no download or GPU required. The server starts on your first visit, which takes about two minutes; one pilot can fly at a time.
 
 ## Overview
 
@@ -26,6 +26,7 @@ The player flies a physically simulated FPV drone over real-world terrain stream
 | UI | UMG + Slate + WebBrowser plugin |
 | Behavior trees | [Arborist](https://github.com/doryunger/arborist) |
 | Road navigation | Custom graph loaded from `Content/Graph/nodes.csv` + `edges.csv` |
+| Hosting | Pixel Streaming 2 on an EC2 GPU instance that starts on demand and stops when idle (`deploy/streaming/`, `wake-service/`) |
 
 
 ## Arborist integration
